@@ -124,6 +124,8 @@ defmodule Langfuse.HTTP do
     start_time = System.monotonic_time()
     metadata = %{method: method, path: path, host: config.host}
 
+    debug_log("HTTP #{method} #{path}")
+
     :telemetry.execute(
       [:langfuse, :http, :request, :start],
       %{system_time: System.system_time()},
@@ -143,6 +145,9 @@ defmodule Langfuse.HTTP do
       |> handle_response()
 
     duration = System.monotonic_time() - start_time
+    duration_ms = System.convert_time_unit(duration, :native, :millisecond)
+
+    debug_log("HTTP #{method} #{path} completed in #{duration_ms}ms: #{result_type(result)}")
 
     :telemetry.execute(
       [:langfuse, :http, :request, :stop],
@@ -187,4 +192,12 @@ defmodule Langfuse.HTTP do
 
   defp maybe_add(params, _key, nil), do: params
   defp maybe_add(params, key, value), do: Keyword.put(params, key, value)
+
+  require Logger
+
+  defp debug_log(message) do
+    if Config.debug?() do
+      Logger.debug("[Langfuse] #{message}")
+    end
+  end
 end
