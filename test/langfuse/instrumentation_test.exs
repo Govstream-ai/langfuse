@@ -153,6 +153,7 @@ defmodule Langfuse.InstrumentationTest do
       assert trace_create.body.tags == ["test"]
     end
 
+    @tag :error_test
     test "captures errors in with_trace block" do
       import Langfuse.Instrumentation
 
@@ -160,7 +161,7 @@ defmodule Langfuse.InstrumentationTest do
         capture_events(fn ->
           try do
             with_trace "failing-block" do
-              raise "Block failed"
+              maybe_fail(true, "Block failed")
             end
           rescue
             _ -> :caught
@@ -171,6 +172,10 @@ defmodule Langfuse.InstrumentationTest do
       assert span_update
       assert span_update.body.level == "ERROR"
       assert span_update.body.statusMessage =~ "Block failed"
+    end
+
+    defp maybe_fail(should_fail, message) do
+      if should_fail, do: raise(message), else: :ok
     end
   end
 end
