@@ -1,0 +1,41 @@
+# Dependencies
+/deps/
+/_build/
+
+# Generated files
+/cover/
+/doc/
+/.fetch
+*.ez
+
+# Mix artifacts
+erl_crash.dump
+*.beam
+
+# Test artifacts
+/tmp/
+
+# dialyzer
+/priv/plts/
+
+# devenv
+.devenv/
+.devenv.flake.nix
+devenv.lock
+
+# direnv
+.direnv/
+
+# IDE
+.idea/
+*.swp
+*.swo
+.vscode/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Environment variables
+.env
+.env.local
