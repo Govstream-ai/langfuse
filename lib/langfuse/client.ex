@@ -142,6 +142,29 @@ defmodule Langfuse.Client do
   end
 
   @doc """
+  Updates a dataset item.
+
+  ## Options
+
+    * `:input` - Updated input data
+    * `:expected_output` - Updated expected output
+    * `:metadata` - Updated metadata
+    * `:status` - Updated status ("ACTIVE" or "ARCHIVED")
+
+  """
+  @spec update_dataset_item(String.t(), keyword()) :: response()
+  def update_dataset_item(id, opts) do
+    body =
+      %{}
+      |> maybe_put(:input, opts[:input])
+      |> maybe_put(:expectedOutput, opts[:expected_output])
+      |> maybe_put(:metadata, opts[:metadata])
+      |> maybe_put(:status, opts[:status])
+
+    patch("/api/public/v2/dataset-items/#{URI.encode(id)}", body)
+  end
+
+  @doc """
   Creates a dataset run.
 
   ## Options
@@ -411,6 +434,34 @@ defmodule Langfuse.Client do
         {:ok, %Req.Response{status: status}} when status in 200..299 -> :ok
         {:ok, %Req.Response{status: status, body: body}} -> {:error, %{status: status, body: body}}
         {:error, reason} -> {:error, reason}
+      end
+    end
+  end
+
+  @doc """
+  Makes a raw PATCH request to the Langfuse API.
+  """
+  @spec patch(String.t(), map()) :: response()
+  def patch(path, body) do
+    config = Config.get()
+
+    unless Config.configured?() do
+      {:error, :not_configured}
+    else
+      url = config.host <> path
+
+      case Req.patch(url,
+             json: body,
+             auth: {:basic, "#{config.public_key}:#{config.secret_key}"}
+           ) do
+        {:ok, %Req.Response{status: status, body: resp_body}} when status in 200..299 ->
+          {:ok, resp_body}
+
+        {:ok, %Req.Response{status: status, body: resp_body}} ->
+          {:error, %{status: status, body: resp_body}}
+
+        {:error, reason} ->
+          {:error, reason}
       end
     end
   end

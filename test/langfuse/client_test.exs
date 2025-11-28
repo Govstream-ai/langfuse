@@ -122,4 +122,18 @@ defmodule Langfuse.ClientTest do
       assert is_tuple(result)
     end
   end
+
+  describe "dataset item update" do
+    test "update_dataset_item/2 accepts update options" do
+      result =
+        Client.update_dataset_item("item-123",
+          input: %{updated: true},
+          expected_output: %{new_output: "value"},
+          metadata: %{version: 2},
+          status: "ACTIVE"
+        )
+
+      assert is_tuple(result)
+    end
+  end
 end
