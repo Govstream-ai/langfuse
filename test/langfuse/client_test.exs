@@ -446,6 +446,187 @@ defmodule Langfuse.ClientTest do
       assert {:ok, result} = Client.post("/api/public/custom", %{data: "test"})
       assert result["success"] == true
     end
+
+    test "list_prompts/1 returns prompts", %{bypass: bypass} do
+      Bypass.expect_once(bypass, "GET", "/api/public/v2/prompts", fn conn ->
+        conn
+        |> Plug.Conn.put_resp_content_type("application/json")
+        |> Plug.Conn.resp(200, Jason.encode!(%{data: [%{name: "prompt-1"}, %{name: "prompt-2"}]}))
+      end)
+
+      assert {:ok, result} = Client.list_prompts()
+      assert length(result["data"]) == 2
+    end
+
+    test "create_prompt/1 creates a prompt", %{bypass: bypass} do
+      Bypass.expect_once(bypass, "POST", "/api/public/v2/prompts", fn conn ->
+        {:ok, body, conn} = Plug.Conn.read_body(conn)
+        payload = Jason.decode!(body)
+
+        assert payload["name"] == "test-prompt"
+        assert payload["prompt"] == "Hello {{name}}"
+        assert payload["type"] == "text"
+
+        conn
+        |> Plug.Conn.put_resp_content_type("application/json")
+        |> Plug.Conn.resp(200, Jason.encode!(%{name: "test-prompt", version: 1}))
+      end)
+
+      assert {:ok, result} = Client.create_prompt(name: "test-prompt", prompt: "Hello {{name}}")
+      assert result["name"] == "test-prompt"
+    end
+
+    test "update_prompt_labels/3 updates labels", %{bypass: bypass} do
+      Bypass.expect_once(
+        bypass,
+        "PATCH",
+        "/api/public/v2/prompts/my-prompt/versions/2",
+        fn conn ->
+          {:ok, body, conn} = Plug.Conn.read_body(conn)
+          payload = Jason.decode!(body)
+
+          assert payload["labels"] == ["production", "latest"]
+
+          conn
+          |> Plug.Conn.put_resp_content_type("application/json")
+          |> Plug.Conn.resp(200, Jason.encode!(%{name: "my-prompt", version: 2}))
+        end
+      )
+
+      assert {:ok, result} =
+               Client.update_prompt_labels("my-prompt", 2, labels: ["production", "latest"])
+
+      assert result["version"] == 2
+    end
+
+    test "get_dataset_run/2 fetches run", %{bypass: bypass} do
+      Bypass.expect_once(bypass, "GET", "/api/public/datasets/my-dataset/runs/run-1", fn conn ->
+        conn
+        |> Plug.Conn.put_resp_content_type("application/json")
+        |> Plug.Conn.resp(200, Jason.encode!(%{name: "run-1", datasetName: "my-dataset"}))
+      end)
+
+      assert {:ok, result} = Client.get_dataset_run("my-dataset", "run-1")
+      assert result["name"] == "run-1"
+    end
+
+    test "list_dataset_runs/2 returns runs", %{bypass: bypass} do
+      Bypass.expect_once(bypass, "GET", "/api/public/datasets/my-dataset/runs", fn conn ->
+        conn
+        |> Plug.Conn.put_resp_content_type("application/json")
+        |> Plug.Conn.resp(200, Jason.encode!(%{data: [%{name: "run-1"}, %{name: "run-2"}]}))
+      end)
+
+      assert {:ok, result} = Client.list_dataset_runs("my-dataset")
+      assert length(result["data"]) == 2
+    end
+
+    test "delete_dataset_run/2 deletes run", %{bypass: bypass} do
+      Bypass.expect_once(
+        bypass,
+        "DELETE",
+        "/api/public/datasets/my-dataset/runs/run-1",
+        fn conn ->
+          Plug.Conn.resp(conn, 204, "")
+        end
+      )
+
+      assert :ok = Client.delete_dataset_run("my-dataset", "run-1")
+    end
+
+    test "list_dataset_items/1 returns items", %{bypass: bypass} do
+      Bypass.expect_once(bypass, "GET", "/api/public/dataset-items", fn conn ->
+        conn
+        |> Plug.Conn.put_resp_content_type("application/json")
+        |> Plug.Conn.resp(200, Jason.encode!(%{data: [%{id: "item-1"}, %{id: "item-2"}]}))
+      end)
+
+      assert {:ok, result} = Client.list_dataset_items()
+      assert length(result["data"]) == 2
+    end
+
+    test "list_dataset_run_items/1 returns run items", %{bypass: bypass} do
+      Bypass.expect_once(bypass, "GET", "/api/public/dataset-run-items", fn conn ->
+        conn
+        |> Plug.Conn.put_resp_content_type("application/json")
+        |> Plug.Conn.resp(200, Jason.encode!(%{data: [%{id: "ri-1"}, %{id: "ri-2"}]}))
+      end)
+
+      assert {:ok, result} = Client.list_dataset_run_items()
+      assert length(result["data"]) == 2
+    end
+
+    test "create_model/1 creates a custom model", %{bypass: bypass} do
+      Bypass.expect_once(bypass, "POST", "/api/public/models", fn conn ->
+        {:ok, body, conn} = Plug.Conn.read_body(conn)
+        payload = Jason.decode!(body)
+
+        assert payload["modelName"] == "custom-model"
+        assert payload["matchPattern"] == "custom-.*"
+        assert payload["inputPrice"] == 0.001
+        assert payload["outputPrice"] == 0.002
+
+        conn
+        |> Plug.Conn.put_resp_content_type("application/json")
+        |> Plug.Conn.resp(200, Jason.encode!(%{id: "model-123", modelName: "custom-model"}))
+      end)
+
+      assert {:ok, result} =
+               Client.create_model(
+                 model_name: "custom-model",
+                 match_pattern: "custom-.*",
+                 input_price: 0.001,
+                 output_price: 0.002
+               )
+
+      assert result["modelName"] == "custom-model"
+    end
+
+    test "delete_model/1 deletes model", %{bypass: bypass} do
+      Bypass.expect_once(bypass, "DELETE", "/api/public/models/model-123", fn conn ->
+        Plug.Conn.resp(conn, 204, "")
+      end)
+
+      assert :ok = Client.delete_model("model-123")
+    end
+  end
+
+  describe "prompt operations" do
+    test "create_prompt/1 requires name and prompt" do
+      assert_raise KeyError, fn ->
+        Client.create_prompt(prompt: "Hello")
+      end
+
+      assert_raise KeyError, fn ->
+        Client.create_prompt(name: "test")
+      end
+    end
+
+    test "update_prompt_labels/3 requires labels" do
+      assert_raise KeyError, fn ->
+        Client.update_prompt_labels("test", 1, [])
+      end
+    end
+  end
+
+  describe "model operations" do
+    test "create_model/1 requires model_name, match_pattern, and prices" do
+      assert_raise KeyError, fn ->
+        Client.create_model(match_pattern: ".*", input_price: 0.001, output_price: 0.002)
+      end
+
+      assert_raise KeyError, fn ->
+        Client.create_model(model_name: "test", input_price: 0.001, output_price: 0.002)
+      end
+
+      assert_raise KeyError, fn ->
+        Client.create_model(model_name: "test", match_pattern: ".*", output_price: 0.002)
+      end
+
+      assert_raise KeyError, fn ->
+        Client.create_model(model_name: "test", match_pattern: ".*", input_price: 0.001)
+      end
+    end
   end
 
   describe "not configured" do

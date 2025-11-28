@@ -61,6 +61,92 @@ defmodule Langfuse.Client do
   @type response :: {:ok, map()} | {:ok, list(map())} | {:error, term()}
 
   @doc """
+  Lists prompts.
+
+  ## Options
+
+    * `:limit` - Maximum number of results
+    * `:page` - Page number for pagination
+    * `:name` - Filter by prompt name
+    * `:label` - Filter by label
+    * `:tag` - Filter by tag
+
+  """
+  @spec list_prompts(keyword()) :: response()
+  def list_prompts(opts \\ []) do
+    params =
+      build_pagination_params(opts)
+      |> maybe_add_param(:name, opts[:name])
+      |> maybe_add_param(:label, opts[:label])
+      |> maybe_add_param(:tag, opts[:tag])
+
+    get("/api/public/v2/prompts", params)
+  end
+
+  @doc """
+  Creates a new prompt version.
+
+  ## Options
+
+    * `:name` - Prompt name (required)
+    * `:prompt` - Prompt content (required). String for text, list of messages for chat.
+    * `:type` - Prompt type: "text" or "chat" (default: "text")
+    * `:labels` - List of labels (e.g., ["production", "latest"])
+    * `:tags` - List of tags
+    * `:config` - Configuration map (model parameters, etc.)
+
+  ## Examples
+
+      Langfuse.Client.create_prompt(
+        name: "greeting",
+        prompt: "Hello {{name}}!",
+        labels: ["production"]
+      )
+
+      Langfuse.Client.create_prompt(
+        name: "chat-assistant",
+        type: "chat",
+        prompt: [
+          %{"role" => "system", "content" => "You are helpful."},
+          %{"role" => "user", "content" => "{{question}}"}
+        ]
+      )
+
+  """
+  @spec create_prompt(keyword()) :: response()
+  def create_prompt(opts) do
+    body =
+      %{
+        name: Keyword.fetch!(opts, :name),
+        prompt: Keyword.fetch!(opts, :prompt)
+      }
+      |> maybe_put(:type, opts[:type] || "text")
+      |> maybe_put(:labels, opts[:labels])
+      |> maybe_put(:tags, opts[:tags])
+      |> maybe_put(:config, opts[:config])
+
+    post("/api/public/v2/prompts", body)
+  end
+
+  @doc """
+  Updates labels for a specific prompt version.
+
+  ## Options
+
+    * `:labels` - New list of labels for this version
+
+  ## Examples
+
+      Langfuse.Client.update_prompt_labels("my-prompt", 3, labels: ["production", "v3"])
+
+  """
+  @spec update_prompt_labels(String.t(), pos_integer(), keyword()) :: response()
+  def update_prompt_labels(name, version, opts) do
+    body = %{labels: Keyword.fetch!(opts, :labels)}
+    patch("/api/public/v2/prompts/#{URI.encode(name)}/versions/#{version}", body)
+  end
+
+  @doc """
   Gets a dataset by name.
   """
   @spec get_dataset(String.t()) :: response()
@@ -216,6 +302,79 @@ defmodule Langfuse.Client do
       |> maybe_put(:metadata, opts[:metadata])
 
     post("/api/public/v2/dataset-run-items", body)
+  end
+
+  @doc """
+  Gets a dataset run by name.
+  """
+  @spec get_dataset_run(String.t(), String.t()) :: response()
+  def get_dataset_run(dataset_name, run_name) do
+    get("/api/public/datasets/#{URI.encode(dataset_name)}/runs/#{URI.encode(run_name)}")
+  end
+
+  @doc """
+  Lists runs for a dataset.
+
+  ## Options
+
+    * `:limit` - Maximum number of results
+    * `:page` - Page number for pagination
+
+  """
+  @spec list_dataset_runs(String.t(), keyword()) :: response()
+  def list_dataset_runs(dataset_name, opts \\ []) do
+    params = build_pagination_params(opts)
+    get("/api/public/datasets/#{URI.encode(dataset_name)}/runs", params)
+  end
+
+  @doc """
+  Deletes a dataset run.
+
+  This operation is irreversible. All run items will also be deleted.
+  """
+  @spec delete_dataset_run(String.t(), String.t()) :: :ok | {:error, term()}
+  def delete_dataset_run(dataset_name, run_name) do
+    delete("/api/public/datasets/#{URI.encode(dataset_name)}/runs/#{URI.encode(run_name)}")
+  end
+
+  @doc """
+  Lists dataset items.
+
+  ## Options
+
+    * `:limit` - Maximum number of results
+    * `:page` - Page number for pagination
+    * `:dataset_name` - Filter by dataset name
+
+  """
+  @spec list_dataset_items(keyword()) :: response()
+  def list_dataset_items(opts \\ []) do
+    params =
+      build_pagination_params(opts)
+      |> maybe_add_param(:datasetName, opts[:dataset_name])
+
+    get("/api/public/dataset-items", params)
+  end
+
+  @doc """
+  Lists dataset run items.
+
+  ## Options
+
+    * `:limit` - Maximum number of results
+    * `:page` - Page number for pagination
+    * `:run_name` - Filter by run name
+    * `:dataset_item_id` - Filter by dataset item ID
+
+  """
+  @spec list_dataset_run_items(keyword()) :: response()
+  def list_dataset_run_items(opts \\ []) do
+    params =
+      build_pagination_params(opts)
+      |> maybe_add_param(:runName, opts[:run_name])
+      |> maybe_add_param(:datasetItemId, opts[:dataset_item_id])
+
+    get("/api/public/dataset-run-items", params)
   end
 
   @doc """
@@ -447,6 +606,62 @@ defmodule Langfuse.Client do
   @spec get_model(String.t()) :: response()
   def get_model(id) do
     get("/api/public/models/#{URI.encode(id)}")
+  end
+
+  @doc """
+  Creates a custom model definition.
+
+  Custom models allow you to define pricing for models not in Langfuse's
+  default model list, enabling accurate cost tracking.
+
+  ## Options
+
+    * `:model_name` - Model identifier (required). Must match what's sent in generations.
+    * `:match_pattern` - Regex pattern for matching model names (required).
+    * `:input_price` - Price per input token in USD (required).
+    * `:output_price` - Price per output token in USD (required).
+    * `:total_price` - Fixed price per request (optional, alternative to token pricing).
+    * `:unit` - Pricing unit: "TOKENS", "CHARACTERS", "IMAGES", etc. (default: "TOKENS")
+    * `:tokenizer_id` - Tokenizer to use for token counting.
+    * `:tokenizer_config` - Tokenizer configuration map.
+
+  ## Examples
+
+      Langfuse.Client.create_model(
+        model_name: "my-custom-model",
+        match_pattern: "my-custom-.*",
+        input_price: 0.0001,
+        output_price: 0.0002,
+        unit: "TOKENS"
+      )
+
+  """
+  @spec create_model(keyword()) :: response()
+  def create_model(opts) do
+    body =
+      %{
+        modelName: Keyword.fetch!(opts, :model_name),
+        matchPattern: Keyword.fetch!(opts, :match_pattern),
+        inputPrice: Keyword.fetch!(opts, :input_price),
+        outputPrice: Keyword.fetch!(opts, :output_price)
+      }
+      |> maybe_put(:totalPrice, opts[:total_price])
+      |> maybe_put(:unit, opts[:unit])
+      |> maybe_put(:tokenizerId, opts[:tokenizer_id])
+      |> maybe_put(:tokenizerConfig, opts[:tokenizer_config])
+
+    post("/api/public/models", body)
+  end
+
+  @doc """
+  Deletes a custom model definition.
+
+  Only custom models created via the API can be deleted.
+  Built-in models cannot be deleted.
+  """
+  @spec delete_model(String.t()) :: :ok | {:error, term()}
+  def delete_model(id) do
+    delete("/api/public/models/#{URI.encode(id)}")
   end
 
   @doc """
