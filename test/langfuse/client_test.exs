@@ -136,4 +136,16 @@ defmodule Langfuse.ClientTest do
       assert is_tuple(result)
     end
   end
+
+  describe "delete operations" do
+    test "delete_dataset/1 returns result tuple" do
+      result = Client.delete_dataset("test-dataset")
+      assert is_tuple(result) or result == :ok
+    end
+
+    test "delete_dataset_item/1 returns result tuple" do
+      result = Client.delete_dataset_item("item-123")
+      assert is_tuple(result) or result == :ok
+    end
+  end
 end

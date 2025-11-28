@@ -403,6 +403,25 @@ defmodule Langfuse.Client do
   end
 
   @doc """
+  Deletes a dataset by name.
+
+  This operation is irreversible. All items and runs in the dataset
+  will also be deleted.
+  """
+  @spec delete_dataset(String.t()) :: :ok | {:error, term()}
+  def delete_dataset(name) do
+    delete("/api/public/v2/datasets/#{URI.encode(name)}")
+  end
+
+  @doc """
+  Deletes a dataset item by ID.
+  """
+  @spec delete_dataset_item(String.t()) :: :ok | {:error, term()}
+  def delete_dataset_item(id) do
+    delete("/api/public/v2/dataset-items/#{URI.encode(id)}")
+  end
+
+  @doc """
   Makes a raw GET request to the Langfuse API.
   """
   @spec get(String.t(), keyword()) :: response()
