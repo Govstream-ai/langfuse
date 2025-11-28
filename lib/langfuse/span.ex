@@ -1,26 +1,56 @@
 defmodule Langfuse.Span do
   @moduledoc """
-  Represents a span observation in Langfuse.
+  A span represents a unit of work with duration within a trace.
 
-  Spans are used to track operations within a trace, such as
-  retrieval steps, preprocessing, or other logical units of work.
+  Spans track operations like data retrieval, preprocessing, postprocessing,
+  or any logical step in your LLM pipeline. They have a start time and an
+  end time, enabling duration analysis in the Langfuse dashboard.
 
-  ## Examples
+  ## Creating Spans
+
+  Spans are created as children of traces or other spans:
 
       trace = Langfuse.trace(name: "rag-pipeline")
 
-      span = Langfuse.span(trace, name: "document-retrieval")
+      span = Langfuse.Span.new(trace, name: "document-retrieval")
+
+  ## Nesting Spans
+
+  Spans can be nested to represent hierarchical operations:
+
+      trace = Langfuse.trace(name: "pipeline")
+      outer_span = Langfuse.Span.new(trace, name: "retrieval")
+      inner_span = Langfuse.Span.new(outer_span, name: "vector-search")
+
+  ## Completing Spans
+
+  Always end spans to record accurate duration:
+
+      span = Langfuse.Span.new(trace, name: "process")
       # ... do work ...
-      span = Langfuse.update(span, output: retrieved_docs)
-      span = Langfuse.end_observation(span)
+      span = Langfuse.Span.end_span(span)
+
+  Or use `update/2` to add output before ending:
+
+      span = Langfuse.Span.update(span, output: result)
+      span = Langfuse.Span.end_span(span)
 
   """
 
   alias Langfuse.{Ingestion, Trace}
 
+  @typedoc "Log level for the observation."
   @type level :: :debug | :default | :warning | :error
+
+  @typedoc "Valid parent types for a span: a trace or another span."
   @type parent :: Trace.t() | t()
 
+  @typedoc """
+  A span struct containing all span attributes.
+
+  The `:id` is auto-generated if not provided. The `:start_time` defaults
+  to the current UTC time. The `:end_time` is set when `end_span/1` is called.
+  """
   @type t :: %__MODULE__{
           id: String.t(),
           trace_id: String.t(),
@@ -28,11 +58,12 @@ defmodule Langfuse.Span do
           name: String.t(),
           start_time: DateTime.t(),
           end_time: DateTime.t() | nil,
-          input: term() | nil,
-          output: term() | nil,
+          input: term(),
+          output: term(),
           metadata: map() | nil,
           level: level() | nil,
-          status_message: String.t() | nil
+          status_message: String.t() | nil,
+          version: String.t() | nil
         }
 
   @enforce_keys [:id, :trace_id, :name, :start_time]
@@ -47,9 +78,50 @@ defmodule Langfuse.Span do
     :output,
     :metadata,
     :level,
-    :status_message
+    :status_message,
+    :version
   ]
 
+  @doc """
+  Creates a new span and enqueues it for ingestion.
+
+  The span is created as a child of the given parent (trace or span).
+  It is immediately queued for asynchronous delivery to Langfuse.
+
+  ## Options
+
+    * `:name` - Name of the span (required)
+    * `:id` - Custom span ID. Uses secure random hex if not provided.
+    * `:input` - Input data for the span.
+    * `:output` - Output data for the span.
+    * `:metadata` - Arbitrary metadata as a map.
+    * `:level` - Log level: `:debug`, `:default`, `:warning`, or `:error`.
+    * `:status_message` - Status description, useful for errors.
+    * `:start_time` - Custom start time. Defaults to `DateTime.utc_now/0`.
+    * `:end_time` - End time if already known.
+    * `:version` - Application version string.
+
+  ## Examples
+
+      iex> trace = Langfuse.Trace.new(name: "test", id: "trace-1")
+      iex> span = Langfuse.Span.new(trace, name: "retrieval")
+      iex> span.name
+      "retrieval"
+      iex> span.trace_id
+      "trace-1"
+
+      iex> trace = Langfuse.Trace.new(name: "test")
+      iex> span = Langfuse.Span.new(trace,
+      ...>   name: "process",
+      ...>   input: %{query: "test"},
+      ...>   level: :debug
+      ...> )
+      iex> span.input
+      %{query: "test"}
+      iex> span.level
+      :debug
+
+  """
   @spec new(parent(), keyword()) :: t()
   def new(parent, opts) do
     name = Keyword.fetch!(opts, :name)
@@ -66,13 +138,49 @@ defmodule Langfuse.Span do
       output: opts[:output],
       metadata: opts[:metadata],
       level: opts[:level],
-      status_message: opts[:status_message]
+      status_message: opts[:status_message],
+      version: opts[:version]
     }
 
     enqueue_event(span, :create)
     span
   end
 
+  @doc """
+  Updates an existing span and enqueues the update for ingestion.
+
+  Only the fields provided in `opts` are updated. Other fields retain
+  their current values.
+
+  ## Options
+
+    * `:name` - Updated span name.
+    * `:input` - Updated input data.
+    * `:output` - Updated output data.
+    * `:metadata` - Updated metadata map (replaces existing).
+    * `:level` - Updated log level.
+    * `:status_message` - Updated status description.
+    * `:end_time` - End time. Use `end_span/1` to set automatically.
+    * `:version` - Updated version string.
+
+  ## Examples
+
+      iex> trace = Langfuse.Trace.new(name: "test")
+      iex> span = Langfuse.Span.new(trace, name: "process")
+      iex> span = Langfuse.Span.update(span, output: %{result: "done"})
+      iex> span.output
+      %{result: "done"}
+
+      iex> trace = Langfuse.Trace.new(name: "test")
+      iex> span = Langfuse.Span.new(trace, name: "process")
+      iex> span = Langfuse.Span.update(span,
+      ...>   level: :error,
+      ...>   status_message: "Failed to process"
+      ...> )
+      iex> span.level
+      :error
+
+  """
   @spec update(t(), keyword()) :: t()
   def update(%__MODULE__{} = span, opts) do
     updated =
@@ -84,19 +192,58 @@ defmodule Langfuse.Span do
       |> maybe_update(:metadata, opts)
       |> maybe_update(:level, opts)
       |> maybe_update(:status_message, opts)
+      |> maybe_update(:version, opts)
 
     enqueue_event(updated, :update)
     updated
   end
 
+  @doc """
+  Ends the span by setting its end time to now.
+
+  This is equivalent to `update(span, end_time: DateTime.utc_now())`.
+
+  ## Examples
+
+      iex> trace = Langfuse.Trace.new(name: "test")
+      iex> span = Langfuse.Span.new(trace, name: "process")
+      iex> span.end_time
+      nil
+      iex> span = Langfuse.Span.end_span(span)
+      iex> span.end_time != nil
+      true
+
+  """
   @spec end_span(t()) :: t()
   def end_span(%__MODULE__{} = span) do
     update(span, end_time: DateTime.utc_now())
   end
 
+  @doc """
+  Returns the span ID.
+
+  ## Examples
+
+      iex> trace = Langfuse.Trace.new(name: "test")
+      iex> span = Langfuse.Span.new(trace, name: "process", id: "span-123")
+      iex> Langfuse.Span.get_id(span)
+      "span-123"
+
+  """
   @spec get_id(t()) :: String.t()
   def get_id(%__MODULE__{id: id}), do: id
 
+  @doc """
+  Returns the trace ID that this span belongs to.
+
+  ## Examples
+
+      iex> trace = Langfuse.Trace.new(name: "test", id: "trace-456")
+      iex> span = Langfuse.Span.new(trace, name: "process")
+      iex> Langfuse.Span.get_trace_id(span)
+      "trace-456"
+
+  """
   @spec get_trace_id(t()) :: String.t()
   def get_trace_id(%__MODULE__{trace_id: trace_id}), do: trace_id
 
@@ -131,6 +278,7 @@ defmodule Langfuse.Span do
     |> maybe_put(:metadata, span.metadata)
     |> maybe_put(:level, span.level && level_to_string(span.level))
     |> maybe_put(:statusMessage, span.status_message)
+    |> maybe_put(:version, span.version)
   end
 
   defp level_to_string(:debug), do: "DEBUG"
