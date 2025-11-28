@@ -43,7 +43,23 @@ defmodule Langfuse.HTTP do
   @impl true
   @spec ingest(list(map())) :: response()
   def ingest(events) when is_list(events) do
-    post(@ingestion_path, %{batch: events})
+    payload = %{
+      batch: events,
+      metadata: %{
+        sdk_name: "langfuse-elixir",
+        sdk_version: sdk_version(),
+        public_key: Config.get(:public_key)
+      }
+    }
+
+    post(@ingestion_path, payload)
+  end
+
+  defp sdk_version do
+    case :application.get_key(:langfuse, :vsn) do
+      {:ok, version} -> to_string(version)
+      :undefined -> "unknown"
+    end
   end
 
   @doc """
