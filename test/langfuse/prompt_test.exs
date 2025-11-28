@@ -191,7 +191,15 @@ defmodule Langfuse.PromptTest do
         ArgumentError -> :ok
       end
 
-      prompt = %Prompt{name: "cached", version: 1, type: :text, prompt: "test", labels: [], tags: []}
+      prompt = %Prompt{
+        name: "cached",
+        version: 1,
+        type: :text,
+        prompt: "test",
+        labels: [],
+        tags: []
+      }
+
       key = {"cached", nil, nil}
       expires_at = System.monotonic_time(:millisecond) + 60_000
       :ets.insert(:langfuse_prompt_cache, {key, prompt, expires_at})
@@ -216,7 +224,15 @@ defmodule Langfuse.PromptTest do
         ArgumentError -> :ok
       end
 
-      prompt = %Prompt{name: "test", version: 1, type: :text, prompt: "test", labels: [], tags: []}
+      prompt = %Prompt{
+        name: "test",
+        version: 1,
+        type: :text,
+        prompt: "test",
+        labels: [],
+        tags: []
+      }
+
       expires_at = System.monotonic_time(:millisecond) + 60_000
       :ets.insert(:langfuse_prompt_cache, {{"test", nil, nil}, prompt, expires_at})
       :ets.insert(:langfuse_prompt_cache, {{"test", 2, nil}, prompt, expires_at})

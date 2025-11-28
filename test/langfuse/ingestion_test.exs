@@ -124,7 +124,9 @@ defmodule Langfuse.IngestionTest do
 
   describe "shutdown/0" do
     test "returns :ok" do
-      assert :ok = Ingestion.shutdown()
+      capture_log(fn ->
+        assert :ok = Ingestion.shutdown()
+      end)
     end
 
     test "clears the queue" do
@@ -188,7 +190,8 @@ defmodule Langfuse.IngestionTest do
         Ingestion.enqueue(%{type: "test", body: %{}})
         Ingestion.flush()
 
-        assert_receive {:telemetry, [:langfuse, :ingestion, :flush, :start], %{batch_size: _}, %{}},
+        assert_receive {:telemetry, [:langfuse, :ingestion, :flush, :start], %{batch_size: _},
+                        %{}},
                        500
 
         :telemetry.detach("test-flush-start")
@@ -230,7 +233,6 @@ defmodule Langfuse.IngestionTest do
       assert Ingestion.queue_size() >= 0
     end
   end
-
 
   describe "flush with empty queue" do
     test "does not emit telemetry when queue is empty" do
