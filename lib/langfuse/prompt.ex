@@ -90,9 +90,9 @@ defmodule Langfuse.Prompt do
 
   ## Examples
 
-      iex> {:ok, prompt} = Langfuse.Prompt.get("my-prompt")
-      iex> prompt.name
-      "my-prompt"
+      {:ok, prompt} = Langfuse.Prompt.get("my-prompt")
+      prompt.name
+      #=> "my-prompt"
 
       {:ok, prompt} = Langfuse.Prompt.get("my-prompt", version: 2)
 
