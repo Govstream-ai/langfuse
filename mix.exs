@@ -72,7 +72,8 @@ defmodule Langfuse.MixProject do
           Langfuse.Trace,
           Langfuse.Span,
           Langfuse.Generation,
-          Langfuse.Event
+          Langfuse.Event,
+          Langfuse.Instrumentation
         ],
         Evaluation: [
           Langfuse.Score,
@@ -84,11 +85,16 @@ defmodule Langfuse.MixProject do
         "API Client": [
           Langfuse.Client
         ],
+        Integrations: [
+          Langfuse.OpenTelemetry
+        ],
         Infrastructure: [
           Langfuse.Config,
           Langfuse.Ingestion,
           Langfuse.HTTP,
-          Langfuse.Telemetry
+          Langfuse.Telemetry,
+          Langfuse.Masking,
+          Langfuse.Error
         ]
       ]
     ]
