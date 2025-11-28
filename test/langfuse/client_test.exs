@@ -148,4 +148,21 @@ defmodule Langfuse.ClientTest do
       assert is_tuple(result) or result == :ok
     end
   end
+
+  describe "models API" do
+    test "get_model/1 returns response type" do
+      result = Client.get_model("model-123")
+      assert is_tuple(result)
+    end
+
+    test "list_models/1 returns response type" do
+      result = Client.list_models()
+      assert is_tuple(result)
+    end
+
+    test "list_models/1 accepts pagination options" do
+      opts = [limit: 50, page: 1]
+      assert is_list(opts)
+    end
+  end
 end

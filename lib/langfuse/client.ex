@@ -422,6 +422,29 @@ defmodule Langfuse.Client do
   end
 
   @doc """
+  Lists available models with pricing information.
+
+  ## Options
+
+    * `:limit` - Maximum number of results
+    * `:page` - Page number
+
+  """
+  @spec list_models(keyword()) :: response()
+  def list_models(opts \\ []) do
+    params = build_pagination_params(opts)
+    get("/api/public/models", params)
+  end
+
+  @doc """
+  Gets a model by ID.
+  """
+  @spec get_model(String.t()) :: response()
+  def get_model(id) do
+    get("/api/public/models/#{URI.encode(id)}")
+  end
+
+  @doc """
   Makes a raw GET request to the Langfuse API.
   """
   @spec get(String.t(), keyword()) :: response()
