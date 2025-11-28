@@ -3,6 +3,46 @@ defmodule Langfuse.OpenTelemetryTest do
 
   alias Langfuse.OpenTelemetry
 
+  describe "extract_trace_context/1" do
+    test "extracts valid traceparent header" do
+      headers = [{"traceparent", "00-0af7651916cd43dd8448eb211c80319c-b7ad6b7169203331-01"}]
+
+      assert {:ok, context} = OpenTelemetry.extract_trace_context(headers)
+      assert context.trace_id == "0af7651916cd43dd8448eb211c80319c"
+      assert context.parent_id == "b7ad6b7169203331"
+      assert context.sampled == true
+    end
+
+    test "returns error for missing headers" do
+      assert {:error, :no_trace_context} = OpenTelemetry.extract_trace_context([])
+    end
+  end
+
+  describe "inject_trace_context/3" do
+    test "generates traceparent header" do
+      headers =
+        OpenTelemetry.inject_trace_context(
+          "0af7651916cd43dd8448eb211c80319c",
+          "b7ad6b7169203331"
+        )
+
+      assert [{"traceparent", traceparent}] = headers
+      assert traceparent == "00-0af7651916cd43dd8448eb211c80319c-b7ad6b7169203331-01"
+    end
+
+    test "respects sampled option" do
+      headers =
+        OpenTelemetry.inject_trace_context(
+          "0af7651916cd43dd8448eb211c80319c",
+          "b7ad6b7169203331",
+          sampled: false
+        )
+
+      assert [{"traceparent", traceparent}] = headers
+      assert String.ends_with?(traceparent, "-00")
+    end
+  end
+
   describe "extract_ids/1" do
     test "extracts trace and span IDs from valid span context tuple" do
       trace_id = 0x0AF7651916CD43DD8448EB211C80319C
@@ -72,16 +112,16 @@ defmodule Langfuse.OpenTelemetryTest do
 
     test "maps langfuse-specific attributes" do
       attrs = %{
-        "langfuse.trace.user_id" => "user-123",
-        "langfuse.trace.session_id" => "session-456",
-        "langfuse.observation.level" => "WARNING"
+        "langfuse.user.id" => "user-123",
+        "langfuse.session.id" => "session-456",
+        "langfuse.observation.level" => "warning"
       }
 
       result = OpenTelemetry.map_attributes(attrs)
 
       assert result.user_id == "user-123"
       assert result.session_id == "session-456"
-      assert result.level == :warning
+      assert result.level == "WARNING"
     end
 
     test "ignores unknown attributes" do

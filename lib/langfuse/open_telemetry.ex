@@ -1,39 +1,58 @@
 defmodule Langfuse.OpenTelemetry do
   @moduledoc """
-  OpenTelemetry integration utilities for Langfuse.
+  OpenTelemetry integration for Langfuse.
 
-  This module provides utilities for bridging OpenTelemetry instrumentation
-  with Langfuse's tracing capabilities. It supports two integration modes:
+  This module provides comprehensive OpenTelemetry support including:
 
-  ## Mode 1: Native OTEL Export (Recommended)
+    * **Span Processor** - Intercept OTEL spans and convert to Langfuse observations
+    * **Attribute Mapping** - Map GenAI semantic conventions to Langfuse fields
+    * **W3C Trace Context** - Distributed tracing with traceparent headers
+    * **Setup Helpers** - Easy configuration for OTEL export
 
-  Configure your OTEL exporter to send traces directly to Langfuse's
-  OpenTelemetry endpoint. Add to your `config/runtime.exs`:
+  ## Quick Start
 
+  ### Option 1: Native OTEL Export (Simplest)
+
+  Configure OpenTelemetry to export directly to Langfuse:
+
+      # config/runtime.exs
       config :opentelemetry_exporter,
         otlp_protocol: :http_protobuf,
-        otlp_endpoint: "https://cloud.langfuse.com/api/public/otel/v1/traces",
+        otlp_endpoint: System.get_env("LANGFUSE_HOST", "https://cloud.langfuse.com") <>
+                       "/api/public/otel/v1/traces",
         otlp_headers: [
-          {"Authorization", "Basic " <> Base.encode64("pk-lf-xxx:sk-lf-xxx")}
+          {"Authorization", "Basic " <> Base.encode64(
+            System.get_env("LANGFUSE_PUBLIC_KEY") <> ":" <>
+            System.get_env("LANGFUSE_SECRET_KEY")
+          )}
         ]
 
-  This sends all OTEL spans to Langfuse where they are converted to traces
-  and observations.
+  Or programmatically:
 
-  ## Mode 2: Bridge to Langfuse SDK
+      Langfuse.OpenTelemetry.Setup.configure_exporter()
 
-  Use the bridging functions to convert OTEL spans to Langfuse observations
-  within your application:
+  ### Option 2: Span Processor (More Control)
 
-      # Start a trace from an OTEL span context
-      {:ok, trace} = Langfuse.OpenTelemetry.trace_from_context(ctx)
+  Use Langfuse's span processor for fine-grained control:
 
-      # Or extract trace/span IDs for correlation
-      {trace_id, span_id} = Langfuse.OpenTelemetry.extract_ids(ctx)
+      # In your application supervisor
+      Langfuse.OpenTelemetry.Setup.register_processor()
+
+      # Or with filtering
+      Langfuse.OpenTelemetry.Setup.register_processor(
+        filter_fn: fn span ->
+          attrs = elem(span, 7)
+          Map.has_key?(attrs, "gen_ai.request.model")
+        end
+      )
 
   ## Attribute Mapping
 
-  OTEL attributes are automatically mapped to Langfuse fields:
+  The integration automatically maps OpenTelemetry semantic conventions to
+  Langfuse fields. See `Langfuse.OpenTelemetry.AttributeMapper` for the
+  complete mapping reference.
+
+  ### GenAI Conventions
 
   | OTEL Attribute | Langfuse Field |
   |----------------|----------------|
@@ -42,32 +61,51 @@ defmodule Langfuse.OpenTelemetry do
   | `gen_ai.usage.output_tokens` | `usage.output` |
   | `gen_ai.prompt` | `input` |
   | `gen_ai.completion` | `output` |
-  | `langfuse.trace.user_id` | `user_id` |
-  | `langfuse.trace.session_id` | `session_id` |
+  | `gen_ai.request.temperature` | `modelParameters.temperature` |
+
+  ### Langfuse Namespace
+
+  | OTEL Attribute | Langfuse Field |
+  |----------------|----------------|
+  | `langfuse.user.id` | `userId` |
+  | `langfuse.session.id` | `sessionId` |
+  | `langfuse.trace.tags` | `tags` |
   | `langfuse.observation.level` | `level` |
 
-  See the [Langfuse OTEL documentation](https://langfuse.com/docs/integrations/otel)
-  for the complete attribute mapping reference.
+  ## Distributed Tracing
 
-  ## Example: Tracing with OpenTelemetry
+  Propagate trace context across service boundaries using W3C Trace Context:
 
-      defmodule MyApp.LLMService do
+      # Extract from incoming request
+      context = Langfuse.OpenTelemetry.TraceContext.extract!(conn.req_headers)
+      trace = Langfuse.trace(id: context.trace_id, name: "api-request")
+
+      # Inject into outgoing request
+      headers = Langfuse.OpenTelemetry.TraceContext.inject(trace.id, span.id)
+      Req.post(downstream_url, headers: headers, json: payload)
+
+  ## Example: Tracing LLM Calls
+
+      defmodule MyApp.LLM do
         require OpenTelemetry.Tracer, as: Tracer
 
-        def call_llm(prompt) do
-          Tracer.with_span "llm-generation", kind: :client do
+        def generate(prompt, opts \\\\ []) do
+          model = Keyword.get(opts, :model, "gpt-4")
+
+          Tracer.with_span "llm.generate", kind: :client do
             Tracer.set_attributes([
-              {"gen_ai.request.model", "gpt-4"},
+              {"gen_ai.system", "openai"},
+              {"gen_ai.request.model", model},
               {"gen_ai.prompt", prompt},
-              {"langfuse.trace.user_id", get_user_id()}
+              {"langfuse.user.id", opts[:user_id]}
             ])
 
-            response = make_api_call(prompt)
+            {response, usage} = call_openai(prompt, model)
 
             Tracer.set_attributes([
               {"gen_ai.completion", response},
-              {"gen_ai.usage.input_tokens", count_tokens(prompt)},
-              {"gen_ai.usage.output_tokens", count_tokens(response)}
+              {"gen_ai.usage.input_tokens", usage.input},
+              {"gen_ai.usage.output_tokens", usage.output}
             ])
 
             response
@@ -75,7 +113,16 @@ defmodule Langfuse.OpenTelemetry do
         end
       end
 
+  ## Submodules
+
+    * `Langfuse.OpenTelemetry.SpanProcessor` - OTEL span processor behaviour
+    * `Langfuse.OpenTelemetry.AttributeMapper` - Attribute mapping logic
+    * `Langfuse.OpenTelemetry.TraceContext` - W3C Trace Context support
+    * `Langfuse.OpenTelemetry.Setup` - Configuration helpers
+
   """
+
+  alias Langfuse.OpenTelemetry.{AttributeMapper, TraceContext, Setup}
 
   @doc """
   Extracts trace and span IDs from an OpenTelemetry span context.
@@ -96,8 +143,8 @@ defmodule Langfuse.OpenTelemetry do
       {trace_id, span_id, _trace_flags, _tracestate, _is_valid}
       when is_integer(trace_id) and is_integer(span_id) ->
         {
-          Integer.to_string(trace_id, 16) |> String.downcase() |> String.pad_leading(32, "0"),
-          Integer.to_string(span_id, 16) |> String.downcase() |> String.pad_leading(16, "0")
+          format_trace_id(trace_id),
+          format_span_id(span_id)
         }
 
       _ ->
@@ -113,9 +160,7 @@ defmodule Langfuse.OpenTelemetry do
 
   ## Options
 
-  All standard `Langfuse.trace/1` options are supported, plus:
-
-    * `:span_ctx` - OpenTelemetry span context (required)
+  All standard `Langfuse.trace/1` options are supported.
 
   ## Examples
 
@@ -143,8 +188,7 @@ defmodule Langfuse.OpenTelemetry do
   @doc """
   Maps OpenTelemetry semantic convention attributes to Langfuse fields.
 
-  This is useful when processing OTEL spans and converting them to
-  Langfuse observations.
+  Delegates to `Langfuse.OpenTelemetry.AttributeMapper.map_attributes/1`.
 
   ## Examples
 
@@ -154,71 +198,90 @@ defmodule Langfuse.OpenTelemetry do
 
   """
   @spec map_attributes(map()) :: map()
-  def map_attributes(otel_attrs) when is_map(otel_attrs) do
-    Enum.reduce(otel_attrs, %{}, fn {key, value}, acc ->
-      case map_attribute(key, value) do
-        nil -> acc
-        {field, mapped_value} -> deep_merge(acc, %{field => mapped_value})
-      end
-    end)
-  end
+  defdelegate map_attributes(attrs), to: AttributeMapper
 
-  defp map_attribute("gen_ai.request.model", value), do: {:model, value}
-  defp map_attribute("gen_ai.response.model", value), do: {:model, value}
-  defp map_attribute("gen_ai.prompt", value), do: {:input, value}
-  defp map_attribute("gen_ai.completion", value), do: {:output, value}
-  defp map_attribute("gen_ai.usage.input_tokens", value), do: {:usage, %{input: value}}
-  defp map_attribute("gen_ai.usage.output_tokens", value), do: {:usage, %{output: value}}
-  defp map_attribute("gen_ai.usage.total_tokens", value), do: {:usage, %{total: value}}
-  defp map_attribute("langfuse.trace.user_id", value), do: {:user_id, value}
-  defp map_attribute("langfuse.trace.session_id", value), do: {:session_id, value}
+  @doc """
+  Extracts W3C Trace Context from HTTP headers.
 
-  defp map_attribute("langfuse.observation.level", value),
-    do: {:level, String.to_atom(String.downcase(value))}
+  Delegates to `Langfuse.OpenTelemetry.TraceContext.extract/1`.
 
-  defp map_attribute("langfuse.observation.model", value), do: {:model, value}
-  defp map_attribute(_key, _value), do: nil
+  ## Examples
 
-  defp deep_merge(left, right) do
-    Map.merge(left, right, fn
-      _key, %{} = l, %{} = r -> deep_merge(l, r)
-      _key, _l, r -> r
-    end)
-  end
+      headers = [{"traceparent", "00-0af7651916cd43dd8448eb211c80319c-b7ad6b7169203331-01"}]
+      {:ok, context} = Langfuse.OpenTelemetry.extract_trace_context(headers)
+
+  """
+  @spec extract_trace_context(list() | map()) ::
+          {:ok, TraceContext.t()} | {:error, atom()}
+  defdelegate extract_trace_context(headers), to: TraceContext, as: :extract
+
+  @doc """
+  Generates W3C Trace Context headers for outgoing requests.
+
+  Delegates to `Langfuse.OpenTelemetry.TraceContext.inject/3`.
+
+  ## Examples
+
+      headers = Langfuse.OpenTelemetry.inject_trace_context(trace_id, span_id)
+
+  """
+  @spec inject_trace_context(String.t(), String.t(), keyword()) ::
+          list({String.t(), String.t()})
+  defdelegate inject_trace_context(trace_id, span_id, opts \\ []), to: TraceContext, as: :inject
 
   @doc """
   Returns the OTEL exporter configuration for sending to Langfuse.
 
-  ## Options
-
-    * `:host` - Langfuse host (default: from config or "https://cloud.langfuse.com")
-    * `:public_key` - Public API key (default: from config)
-    * `:secret_key` - Secret API key (default: from config)
+  Delegates to `Langfuse.OpenTelemetry.Setup.exporter_config/1`.
 
   ## Examples
 
       config = Langfuse.OpenTelemetry.exporter_config()
-      # => [
-      #      otlp_protocol: :http_protobuf,
-      #      otlp_endpoint: "https://cloud.langfuse.com/api/public/otel/v1/traces",
-      #      otlp_headers: [{"Authorization", "Basic cGstbGYtLi4uOnNrLWxmLS4uLg=="}]
-      #    ]
 
   """
   @spec exporter_config(keyword()) :: keyword()
-  def exporter_config(opts \\ []) do
-    config = Langfuse.Config.get()
+  defdelegate exporter_config(opts \\ []), to: Setup
 
-    host = Keyword.get(opts, :host, config.host || "https://cloud.langfuse.com")
-    public_key = Keyword.get(opts, :public_key, config.public_key)
-    secret_key = Keyword.get(opts, :secret_key, config.secret_key)
+  @doc """
+  Configures the OpenTelemetry exporter to send to Langfuse.
 
-    auth = Base.encode64("#{public_key}:#{secret_key}")
+  Delegates to `Langfuse.OpenTelemetry.Setup.configure_exporter/1`.
 
-    [
-      otlp_protocol: :http_protobuf,
-      otlp_endpoint: "#{host}/api/public/otel/v1/traces",
-      otlp_headers: [{"Authorization", "Basic #{auth}"}]
-    ]
+  ## Examples
+
+      Langfuse.OpenTelemetry.configure_exporter()
+
+  """
+  @spec configure_exporter(keyword()) :: :ok
+  defdelegate configure_exporter(opts \\ []), to: Setup
+
+  @doc """
+  Returns the span processor configuration for OpenTelemetry.
+
+  Delegates to `Langfuse.OpenTelemetry.Setup.processor_config/1`.
+
+  ## Examples
+
+      config :opentelemetry,
+        processors: [
+          Langfuse.OpenTelemetry.processor_config()
+        ]
+
+  """
+  @spec processor_config(keyword()) :: {module(), map()}
+  defdelegate processor_config(opts \\ []), to: Setup
+
+  defp format_trace_id(trace_id) when is_integer(trace_id) do
+    trace_id
+    |> Integer.to_string(16)
+    |> String.downcase()
+    |> String.pad_leading(32, "0")
+  end
+
+  defp format_span_id(span_id) when is_integer(span_id) do
+    span_id
+    |> Integer.to_string(16)
+    |> String.downcase()
+    |> String.pad_leading(16, "0")
   end
 end
