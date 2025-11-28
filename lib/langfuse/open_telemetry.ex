@@ -127,7 +127,8 @@ defmodule Langfuse.OpenTelemetry do
       )
 
   """
-  @spec trace_from_context(term(), keyword()) :: {:ok, Langfuse.Trace.t()} | {:error, :invalid_context}
+  @spec trace_from_context(term(), keyword()) ::
+          {:ok, Langfuse.Trace.t()} | {:error, :invalid_context}
   def trace_from_context(span_ctx, opts \\ []) do
     case extract_ids(span_ctx) do
       {trace_id, _span_id} ->
@@ -171,7 +172,10 @@ defmodule Langfuse.OpenTelemetry do
   defp map_attribute("gen_ai.usage.total_tokens", value), do: {:usage, %{total: value}}
   defp map_attribute("langfuse.trace.user_id", value), do: {:user_id, value}
   defp map_attribute("langfuse.trace.session_id", value), do: {:session_id, value}
-  defp map_attribute("langfuse.observation.level", value), do: {:level, String.to_atom(String.downcase(value))}
+
+  defp map_attribute("langfuse.observation.level", value),
+    do: {:level, String.to_atom(String.downcase(value))}
+
   defp map_attribute("langfuse.observation.model", value), do: {:model, value}
   defp map_attribute(_key, _value), do: nil
 

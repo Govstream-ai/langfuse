@@ -15,7 +15,8 @@ defmodule Langfuse.MixProject do
       package: package(),
       docs: docs(),
       name: "Langfuse",
-      description: "Community Elixir SDK for Langfuse - LLM observability, tracing, and prompt management",
+      description:
+        "Community Elixir SDK for Langfuse - LLM observability, tracing, and prompt management",
       source_url: @source_url,
       dialyzer: [
         plt_file: {:no_warn, "priv/plts/dialyzer.plt"},
@@ -39,7 +40,6 @@ defmodule Langfuse.MixProject do
       {:req, "~> 0.5"},
       {:jason, "~> 1.4"},
       {:telemetry, "~> 1.2"},
-
       {:ex_doc, "~> 0.35", only: :dev, runtime: false},
       {:dialyxir, "~> 1.4", only: [:dev, :test], runtime: false},
       {:credo, "~> 1.7", only: [:dev, :test], runtime: false},

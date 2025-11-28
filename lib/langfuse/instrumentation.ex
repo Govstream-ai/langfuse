@@ -95,7 +95,7 @@ defmodule Langfuse.Instrumentation do
       end
 
     quote do
-      unquote_splicing(overrides)
+      (unquote_splicing(overrides))
     end
   end
 

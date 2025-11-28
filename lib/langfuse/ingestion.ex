@@ -228,7 +228,9 @@ defmodule Langfuse.Ingestion do
     error_count = length(errors)
 
     if error_count > 0 do
-      Logger.warning("[Langfuse] Ingestion completed with #{error_count} errors: #{inspect(errors)}")
+      Logger.warning(
+        "[Langfuse] Ingestion completed with #{error_count} errors: #{inspect(errors)}"
+      )
     end
 
     :telemetry.execute(

@@ -80,11 +80,12 @@ defmodule Langfuse.Client do
   """
   @spec create_dataset(keyword()) :: response()
   def create_dataset(opts) do
-    body = %{
-      name: Keyword.fetch!(opts, :name)
-    }
-    |> maybe_put(:description, opts[:description])
-    |> maybe_put(:metadata, opts[:metadata])
+    body =
+      %{
+        name: Keyword.fetch!(opts, :name)
+      }
+      |> maybe_put(:description, opts[:description])
+      |> maybe_put(:metadata, opts[:metadata])
 
     post("/api/public/v2/datasets", body)
   end
@@ -120,15 +121,16 @@ defmodule Langfuse.Client do
   """
   @spec create_dataset_item(keyword()) :: response()
   def create_dataset_item(opts) do
-    body = %{
-      datasetName: Keyword.fetch!(opts, :dataset_name),
-      input: Keyword.fetch!(opts, :input)
-    }
-    |> maybe_put(:expectedOutput, opts[:expected_output])
-    |> maybe_put(:metadata, opts[:metadata])
-    |> maybe_put(:sourceTraceId, opts[:source_trace_id])
-    |> maybe_put(:sourceObservationId, opts[:source_observation_id])
-    |> maybe_put(:status, opts[:status])
+    body =
+      %{
+        datasetName: Keyword.fetch!(opts, :dataset_name),
+        input: Keyword.fetch!(opts, :input)
+      }
+      |> maybe_put(:expectedOutput, opts[:expected_output])
+      |> maybe_put(:metadata, opts[:metadata])
+      |> maybe_put(:sourceTraceId, opts[:source_trace_id])
+      |> maybe_put(:sourceObservationId, opts[:source_observation_id])
+      |> maybe_put(:status, opts[:status])
 
     post("/api/public/v2/dataset-items", body)
   end
@@ -177,12 +179,13 @@ defmodule Langfuse.Client do
   """
   @spec create_dataset_run(keyword()) :: response()
   def create_dataset_run(opts) do
-    body = %{
-      name: Keyword.fetch!(opts, :name),
-      datasetName: Keyword.fetch!(opts, :dataset_name)
-    }
-    |> maybe_put(:description, opts[:description])
-    |> maybe_put(:metadata, opts[:metadata])
+    body =
+      %{
+        name: Keyword.fetch!(opts, :name),
+        datasetName: Keyword.fetch!(opts, :dataset_name)
+      }
+      |> maybe_put(:description, opts[:description])
+      |> maybe_put(:metadata, opts[:metadata])
 
     post("/api/public/v2/dataset-runs", body)
   end
@@ -202,14 +205,15 @@ defmodule Langfuse.Client do
   """
   @spec create_dataset_run_item(keyword()) :: response()
   def create_dataset_run_item(opts) do
-    body = %{
-      runName: Keyword.fetch!(opts, :run_name),
-      datasetItemId: Keyword.fetch!(opts, :dataset_item_id),
-      traceId: Keyword.fetch!(opts, :trace_id)
-    }
-    |> maybe_put(:runDescription, opts[:run_description])
-    |> maybe_put(:observationId, opts[:observation_id])
-    |> maybe_put(:metadata, opts[:metadata])
+    body =
+      %{
+        runName: Keyword.fetch!(opts, :run_name),
+        datasetItemId: Keyword.fetch!(opts, :dataset_item_id),
+        traceId: Keyword.fetch!(opts, :trace_id)
+      }
+      |> maybe_put(:runDescription, opts[:run_description])
+      |> maybe_put(:observationId, opts[:observation_id])
+      |> maybe_put(:metadata, opts[:metadata])
 
     post("/api/public/v2/dataset-run-items", body)
   end
@@ -246,14 +250,15 @@ defmodule Langfuse.Client do
   """
   @spec create_score_config(keyword()) :: response()
   def create_score_config(opts) do
-    body = %{
-      name: Keyword.fetch!(opts, :name),
-      dataType: Keyword.fetch!(opts, :data_type)
-    }
-    |> maybe_put(:minValue, opts[:min_value])
-    |> maybe_put(:maxValue, opts[:max_value])
-    |> maybe_put(:categories, opts[:categories])
-    |> maybe_put(:description, opts[:description])
+    body =
+      %{
+        name: Keyword.fetch!(opts, :name),
+        dataType: Keyword.fetch!(opts, :data_type)
+      }
+      |> maybe_put(:minValue, opts[:min_value])
+      |> maybe_put(:maxValue, opts[:max_value])
+      |> maybe_put(:categories, opts[:categories])
+      |> maybe_put(:description, opts[:description])
 
     post("/api/public/v2/score-configs", body)
   end
@@ -473,9 +478,14 @@ defmodule Langfuse.Client do
       url = config.host <> path
 
       case Req.delete(url, auth: {:basic, "#{config.public_key}:#{config.secret_key}"}) do
-        {:ok, %Req.Response{status: status}} when status in 200..299 -> :ok
-        {:ok, %Req.Response{status: status, body: body}} -> {:error, %{status: status, body: body}}
-        {:error, reason} -> {:error, reason}
+        {:ok, %Req.Response{status: status}} when status in 200..299 ->
+          :ok
+
+        {:ok, %Req.Response{status: status, body: body}} ->
+          {:error, %{status: status, body: body}}
+
+        {:error, reason} ->
+          {:error, reason}
       end
     end
   end

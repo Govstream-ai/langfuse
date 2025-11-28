@@ -51,7 +51,15 @@ defmodule Langfuse.Masking do
     {~r/\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b/, "[MASKED_EMAIL]"}
   ]
 
-  @default_mask_keys [:password, :secret, :api_key, :token, :authorization, :secret_key, :private_key]
+  @default_mask_keys [
+    :password,
+    :secret,
+    :api_key,
+    :token,
+    :authorization,
+    :secret_key,
+    :private_key
+  ]
 
   @typedoc "Masking configuration options."
   @type config :: [

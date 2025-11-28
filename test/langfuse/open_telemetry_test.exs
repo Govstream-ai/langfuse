@@ -103,11 +103,12 @@ defmodule Langfuse.OpenTelemetryTest do
 
   describe "exporter_config/1" do
     test "returns valid OTEL exporter configuration" do
-      config = OpenTelemetry.exporter_config(
-        host: "https://example.langfuse.com",
-        public_key: "pk-test",
-        secret_key: "sk-test"
-      )
+      config =
+        OpenTelemetry.exporter_config(
+          host: "https://example.langfuse.com",
+          public_key: "pk-test",
+          secret_key: "sk-test"
+        )
 
       assert config[:otlp_protocol] == :http_protobuf
       assert config[:otlp_endpoint] == "https://example.langfuse.com/api/public/otel/v1/traces"
@@ -121,10 +122,11 @@ defmodule Langfuse.OpenTelemetryTest do
     end
 
     test "uses default cloud host when not specified" do
-      config = OpenTelemetry.exporter_config(
-        public_key: "pk",
-        secret_key: "sk"
-      )
+      config =
+        OpenTelemetry.exporter_config(
+          public_key: "pk",
+          secret_key: "sk"
+        )
 
       assert config[:otlp_endpoint] =~ "cloud.langfuse.com"
     end
@@ -152,11 +154,12 @@ defmodule Langfuse.OpenTelemetryTest do
       span_id = 0x456
       span_ctx = {trace_id, span_id, 0, [], true}
 
-      {:ok, trace} = OpenTelemetry.trace_from_context(span_ctx,
-        name: "test",
-        user_id: "user-123",
-        session_id: "session-456"
-      )
+      {:ok, trace} =
+        OpenTelemetry.trace_from_context(span_ctx,
+          name: "test",
+          user_id: "user-123",
+          session_id: "session-456"
+        )
 
       assert trace.user_id == "user-123"
       assert trace.session_id == "session-456"

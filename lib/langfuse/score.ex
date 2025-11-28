@@ -107,19 +107,20 @@ defmodule Langfuse.Score do
     data_type = opts[:data_type] || infer_data_type(opts)
     {value, string_value} = normalize_values(opts, data_type)
 
-    score = %{
-      id: opts[:id] || generate_id(),
-      traceId: trace_id,
-      name: name,
-      value: value,
-      dataType: data_type_to_string(data_type)
-    }
-    |> maybe_put(:observationId, observation_id)
-    |> maybe_put(:stringValue, string_value)
-    |> maybe_put(:comment, opts[:comment])
-    |> maybe_put(:configId, opts[:config_id])
-    |> maybe_put(:metadata, opts[:metadata])
-    |> maybe_put(:environment, Langfuse.Config.get(:environment))
+    score =
+      %{
+        id: opts[:id] || generate_id(),
+        traceId: trace_id,
+        name: name,
+        value: value,
+        dataType: data_type_to_string(data_type)
+      }
+      |> maybe_put(:observationId, observation_id)
+      |> maybe_put(:stringValue, string_value)
+      |> maybe_put(:comment, opts[:comment])
+      |> maybe_put(:configId, opts[:config_id])
+      |> maybe_put(:metadata, opts[:metadata])
+      |> maybe_put(:environment, Langfuse.Config.get(:environment))
 
     event = %{
       id: generate_id(),
@@ -162,19 +163,20 @@ defmodule Langfuse.Score do
     data_type = opts[:data_type] || infer_data_type(opts)
     {value, string_value} = normalize_values(opts, data_type)
 
-    score = %{
-      id: opts[:id] || generate_id(),
-      name: name,
-      value: value,
-      dataType: data_type_to_string(data_type),
-      source: "API",
-      sessionId: session_id
-    }
-    |> maybe_put(:stringValue, string_value)
-    |> maybe_put(:comment, opts[:comment])
-    |> maybe_put(:configId, opts[:config_id])
-    |> maybe_put(:metadata, opts[:metadata])
-    |> maybe_put(:environment, Langfuse.Config.get(:environment))
+    score =
+      %{
+        id: opts[:id] || generate_id(),
+        name: name,
+        value: value,
+        dataType: data_type_to_string(data_type),
+        source: "API",
+        sessionId: session_id
+      }
+      |> maybe_put(:stringValue, string_value)
+      |> maybe_put(:comment, opts[:comment])
+      |> maybe_put(:configId, opts[:config_id])
+      |> maybe_put(:metadata, opts[:metadata])
+      |> maybe_put(:environment, Langfuse.Config.get(:environment))
 
     event = %{
       id: generate_id(),

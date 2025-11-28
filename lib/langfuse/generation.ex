@@ -360,7 +360,10 @@ defmodule Langfuse.Generation do
     |> maybe_put(:model, gen.model)
     |> maybe_put(:modelParameters, gen.model_parameters)
     |> maybe_put(:endTime, gen.end_time && DateTime.to_iso8601(gen.end_time))
-    |> maybe_put(:completionStartTime, gen.completion_start_time && DateTime.to_iso8601(gen.completion_start_time))
+    |> maybe_put(
+      :completionStartTime,
+      gen.completion_start_time && DateTime.to_iso8601(gen.completion_start_time)
+    )
     |> maybe_put(:input, gen.input)
     |> maybe_put(:output, gen.output)
     |> maybe_put(:usage, format_usage(gen.usage))
@@ -401,8 +404,18 @@ defmodule Langfuse.Generation do
   def format_usage(nil), do: nil
 
   def format_usage(usage) when is_map(usage) do
-    known_keys = [:input, :output, :total, :unit, :input_cost, :output_cost, :total_cost,
-                  :prompt_tokens, :completion_tokens, :total_tokens]
+    known_keys = [
+      :input,
+      :output,
+      :total,
+      :unit,
+      :input_cost,
+      :output_cost,
+      :total_cost,
+      :prompt_tokens,
+      :completion_tokens,
+      :total_tokens
+    ]
 
     base =
       %{}
