@@ -1,14 +1,42 @@
 defmodule Langfuse.Ingestion do
   @moduledoc """
-  GenServer for async event batching and ingestion to Langfuse.
+  Asynchronous event batching and ingestion to Langfuse.
 
-  Events are queued and sent in batches either when:
-  - The batch size is reached
-  - The flush interval timer fires
-  - `flush/1` is called explicitly
+  This GenServer manages the queue of tracing events and sends them
+  to Langfuse in batches. Events are queued immediately and sent
+  asynchronously to avoid blocking application code.
 
-  This module handles graceful shutdown, ensuring all pending events
-  are flushed before the application terminates.
+  ## Batching Behavior
+
+  Events are sent in batches when any of these conditions occur:
+
+    * Batch size threshold is reached (configured via `:batch_size`)
+    * Flush interval timer fires (configured via `:flush_interval`)
+    * `flush/1` is called explicitly
+    * Application shutdown is initiated
+
+  ## Graceful Shutdown
+
+  The ingestion process traps exits and flushes all pending events
+  during termination. This ensures no events are lost during
+  application shutdown.
+
+  ## Telemetry
+
+  Batch flushes emit telemetry events. See `Langfuse.Telemetry` for details.
+
+  ## Usage
+
+  This module is used internally by the SDK. Events are enqueued
+  automatically when creating traces, spans, generations, events, and scores.
+
+      Langfuse.trace(name: "request")
+
+  For explicit control:
+
+      Langfuse.flush()
+      Langfuse.shutdown()
+
   """
 
   use GenServer
@@ -22,10 +50,20 @@ defmodule Langfuse.Ingestion do
     queue_size: 0
   ]
 
+  @doc false
   def start_link(opts \\ []) do
     GenServer.start_link(__MODULE__, opts, name: __MODULE__)
   end
 
+  @doc """
+  Enqueues an event for batched ingestion.
+
+  Events are queued asynchronously and sent in batches. If tracing
+  is disabled via configuration, this is a no-op.
+
+  This function is called internally by trace, span, generation,
+  event, and score modules.
+  """
   @spec enqueue(map()) :: :ok
   def enqueue(event) when is_map(event) do
     if Config.enabled?() do
@@ -35,6 +73,24 @@ defmodule Langfuse.Ingestion do
     end
   end
 
+  @doc """
+  Flushes all pending events synchronously.
+
+  Blocks until all queued events are sent or the timeout is reached.
+
+  ## Options
+
+    * `:timeout` - Maximum wait time in milliseconds. Defaults to 5,000.
+
+  ## Examples
+
+      Langfuse.Ingestion.flush()
+      # => :ok
+
+      Langfuse.Ingestion.flush(timeout: 10_000)
+      # => :ok
+
+  """
   @spec flush(keyword()) :: :ok | {:error, :timeout}
   def flush(opts \\ []) do
     timeout = Keyword.get(opts, :timeout, 5_000)
@@ -46,11 +102,27 @@ defmodule Langfuse.Ingestion do
     end
   end
 
+  @doc """
+  Shuts down the ingestion process gracefully.
+
+  Flushes all pending events before stopping. Uses a 30-second timeout.
+  """
   @spec shutdown() :: :ok
   def shutdown do
     GenServer.call(__MODULE__, :shutdown, 30_000)
   end
 
+  @doc """
+  Returns the current number of queued events.
+
+  Useful for monitoring and debugging.
+
+  ## Examples
+
+      Langfuse.Ingestion.queue_size()
+      # => 5
+
+  """
   @spec queue_size() :: non_neg_integer()
   def queue_size do
     GenServer.call(__MODULE__, :queue_size)

@@ -1,29 +1,63 @@
 defmodule Langfuse.Client do
   @moduledoc """
-  Low-level client for Langfuse REST API.
+  Direct access to the Langfuse REST API.
 
-  Provides direct access to Langfuse API endpoints for datasets,
-  score configurations, traces, sessions, and other management operations.
+  This module provides functions for interacting with Langfuse management
+  APIs that are not covered by the tracing SDK. Use this for datasets,
+  score configurations, listing traces/sessions, and other administrative
+  operations.
 
-  ## Examples
+  ## Datasets
 
-      # Get a dataset
-      {:ok, dataset} = Langfuse.Client.get_dataset("my-dataset")
+  Create and manage evaluation datasets:
 
-      # List traces
-      {:ok, traces} = Langfuse.Client.list_traces(limit: 10)
+      {:ok, dataset} = Langfuse.Client.create_dataset(name: "qa-eval")
 
-      # Create a dataset item
       {:ok, item} = Langfuse.Client.create_dataset_item(
-        dataset_name: "my-dataset",
-        input: %{query: "test"},
-        expected_output: %{answer: "response"}
+        dataset_name: "qa-eval",
+        input: %{question: "What is Elixir?"},
+        expected_output: %{answer: "A functional programming language"}
+      )
+
+  ## Dataset Runs
+
+  Track evaluation runs against datasets:
+
+      {:ok, run} = Langfuse.Client.create_dataset_run(
+        name: "eval-2025-01",
+        dataset_name: "qa-eval"
+      )
+
+      {:ok, _} = Langfuse.Client.create_dataset_run_item(
+        run_name: "eval-2025-01",
+        dataset_item_id: item["id"],
+        trace_id: trace.id
+      )
+
+  ## Querying Data
+
+  List and retrieve traces, sessions, and scores:
+
+      {:ok, traces} = Langfuse.Client.list_traces(limit: 10, user_id: "user-123")
+      {:ok, trace} = Langfuse.Client.get_trace("trace-id")
+      {:ok, sessions} = Langfuse.Client.list_sessions(limit: 50)
+
+  ## Score Configurations
+
+  Manage score configurations:
+
+      {:ok, config} = Langfuse.Client.create_score_config(
+        name: "accuracy",
+        data_type: "NUMERIC",
+        min_value: 0,
+        max_value: 1
       )
 
   """
 
   alias Langfuse.{Config, HTTP}
 
+  @typedoc "API response result."
   @type response :: {:ok, map()} | {:ok, list(map())} | {:error, term()}
 
   @doc """

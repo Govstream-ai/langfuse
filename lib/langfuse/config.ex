@@ -1,12 +1,17 @@
 defmodule Langfuse.Config do
   @moduledoc """
-  Configuration management for Langfuse SDK.
+  Configuration management for the Langfuse SDK.
 
-  ## Configuration Options
+  The SDK reads configuration from application config and environment
+  variables. Environment variables take precedence over application config.
+
+  ## Application Configuration
+
+  Configure Langfuse in your `config/config.exs` or runtime config:
 
       config :langfuse,
-        public_key: "pk-...",
-        secret_key: "sk-...",
+        public_key: "pk-lf-...",
+        secret_key: "sk-lf-...",
         host: "https://cloud.langfuse.com",
         flush_interval: 5_000,
         batch_size: 100,
@@ -15,13 +20,35 @@ defmodule Langfuse.Config do
 
   ## Environment Variables
 
-  Configuration can also be set via environment variables:
+  These environment variables override application config:
 
-    - `LANGFUSE_PUBLIC_KEY`
-    - `LANGFUSE_SECRET_KEY`
-    - `LANGFUSE_HOST`
+    * `LANGFUSE_PUBLIC_KEY` - API public key
+    * `LANGFUSE_SECRET_KEY` - API secret key
+    * `LANGFUSE_HOST` - Langfuse server URL
 
-  Environment variables take precedence over application config.
+  ## Configuration Options
+
+    * `:public_key` - Langfuse API public key (required for API calls)
+    * `:secret_key` - Langfuse API secret key (required for API calls)
+    * `:host` - Langfuse server URL. Defaults to `"https://cloud.langfuse.com"`.
+    * `:flush_interval` - Interval in milliseconds between automatic flushes.
+      Defaults to 5,000 (5 seconds).
+    * `:batch_size` - Maximum events per batch before automatic flush.
+      Defaults to 100.
+    * `:max_retries` - Maximum retry attempts for failed requests.
+      Defaults to 3.
+    * `:enabled` - Whether tracing is enabled. Defaults to `true`.
+      Set to `false` to disable all tracing (useful for tests).
+
+  ## Self-Hosted Langfuse
+
+  For self-hosted Langfuse instances, set the host:
+
+      config :langfuse,
+        host: "https://langfuse.mycompany.com",
+        public_key: "pk-...",
+        secret_key: "sk-..."
+
   """
 
   use GenServer
@@ -41,6 +68,12 @@ defmodule Langfuse.Config do
     :enabled
   ]
 
+  @typedoc """
+  Configuration struct containing all SDK settings.
+
+  The struct is populated on application start from application config
+  and environment variables.
+  """
   @type t :: %__MODULE__{
           public_key: String.t() | nil,
           secret_key: String.t() | nil,
@@ -51,26 +84,71 @@ defmodule Langfuse.Config do
           enabled: boolean()
         }
 
+  @doc false
   def start_link(opts \\ []) do
     GenServer.start_link(__MODULE__, opts, name: __MODULE__)
   end
 
+  @doc """
+  Returns the current configuration struct.
+
+  ## Examples
+
+      config = Langfuse.Config.get()
+      config.host
+      # => "https://cloud.langfuse.com"
+
+  """
   @spec get() :: t()
   def get do
     GenServer.call(__MODULE__, :get)
   end
 
+  @doc """
+  Returns a specific configuration value by key.
+
+  ## Examples
+
+      Langfuse.Config.get(:host)
+      # => "https://cloud.langfuse.com"
+
+      Langfuse.Config.get(:batch_size)
+      # => 100
+
+  """
   @spec get(atom()) :: term()
   def get(key) when is_atom(key) do
     config = get()
     Map.get(config, key)
   end
 
+  @doc """
+  Returns whether tracing is enabled.
+
+  When disabled, all tracing operations become no-ops.
+
+  ## Examples
+
+      Langfuse.Config.enabled?()
+      # => true
+
+  """
   @spec enabled?() :: boolean()
   def enabled? do
     get(:enabled)
   end
 
+  @doc """
+  Returns whether API credentials are configured.
+
+  Returns `true` if both `:public_key` and `:secret_key` are set.
+
+  ## Examples
+
+      Langfuse.Config.configured?()
+      # => true
+
+  """
   @spec configured?() :: boolean()
   def configured? do
     config = get()

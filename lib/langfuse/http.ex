@@ -1,8 +1,28 @@
 defmodule Langfuse.HTTP do
   @moduledoc """
-  HTTP client for Langfuse API using Req.
+  HTTP client for Langfuse API.
 
-  Handles authentication, retries with exponential backoff, and telemetry.
+  This module handles all HTTP communication with the Langfuse API,
+  including authentication, automatic retries with exponential backoff,
+  and telemetry instrumentation.
+
+  ## Authentication
+
+  Requests are authenticated using HTTP Basic Auth with the configured
+  public key and secret key.
+
+  ## Retries
+
+  Failed requests are automatically retried with exponential backoff.
+  The base delay starts at 1 second and doubles with each attempt,
+  capped at 30 seconds. Random jitter is added to prevent thundering herd.
+
+  ## Telemetry
+
+  HTTP requests emit telemetry events. See `Langfuse.Telemetry` for details.
+
+  This module is used internally by the SDK. For direct API access,
+  use `Langfuse.Client` instead.
   """
 
   alias Langfuse.Config
@@ -10,13 +30,30 @@ defmodule Langfuse.HTTP do
   @ingestion_path "/api/public/ingestion"
   @prompts_path "/api/public/v2/prompts"
 
+  @typedoc "HTTP response result."
   @type response :: {:ok, map()} | {:error, term()}
 
+  @doc """
+  Sends a batch of events to the ingestion API.
+
+  Used internally by `Langfuse.Ingestion` to flush event batches.
+  """
   @spec ingest(list(map())) :: response()
   def ingest(events) when is_list(events) do
     post(@ingestion_path, %{batch: events})
   end
 
+  @doc """
+  Fetches a prompt from the prompts API.
+
+  Used internally by `Langfuse.Prompt`.
+
+  ## Options
+
+    * `:version` - Specific version number
+    * `:label` - Label to fetch (e.g., "production")
+
+  """
   @spec get_prompt(String.t(), keyword()) :: response()
   def get_prompt(name, opts \\ []) do
     params =
@@ -27,6 +64,11 @@ defmodule Langfuse.HTTP do
     get(@prompts_path, params)
   end
 
+  @doc """
+  Makes a GET request to the Langfuse API.
+
+  Returns `{:error, :not_configured}` if credentials are not set.
+  """
   @spec get(String.t(), keyword()) :: response()
   def get(path, params \\ []) do
     config = Config.get()
@@ -38,6 +80,11 @@ defmodule Langfuse.HTTP do
     end
   end
 
+  @doc """
+  Makes a POST request to the Langfuse API.
+
+  Returns `{:error, :not_configured}` if credentials are not set.
+  """
   @spec post(String.t(), map()) :: response()
   def post(path, body) do
     config = Config.get()
