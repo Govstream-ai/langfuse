@@ -85,6 +85,8 @@ defmodule Langfuse.Prompt do
     * `:version` - Specific version number to fetch.
     * `:label` - Label to fetch (e.g., "production", "latest").
     * `:cache_ttl` - Cache TTL in milliseconds. Defaults to 60,000 (1 minute).
+    * `:fallback` - Fallback prompt struct or template to use if fetch fails.
+      Can be a `%Langfuse.Prompt{}` struct or a string template.
 
   ## Examples
 
@@ -98,15 +100,32 @@ defmodule Langfuse.Prompt do
 
       {:ok, prompt} = Langfuse.Prompt.get("my-prompt", cache_ttl: 300_000)
 
+      # With fallback prompt struct
+      fallback = %Langfuse.Prompt{
+        name: "my-prompt",
+        version: 0,
+        type: :text,
+        prompt: "Default template {{name}}",
+        labels: [],
+        tags: []
+      }
+      {:ok, prompt} = Langfuse.Prompt.get("my-prompt", fallback: fallback)
+
+      # With fallback template string (creates text prompt)
+      {:ok, prompt} = Langfuse.Prompt.get("my-prompt",
+        fallback: "Default template {{name}}"
+      )
+
   ## Errors
 
-  Returns `{:error, :not_found}` if the prompt does not exist.
+  Returns `{:error, :not_found}` if the prompt does not exist and no fallback provided.
 
   """
   @spec get(String.t(), keyword()) :: {:ok, t()} | {:error, term()}
   def get(name, opts \\ []) do
     cache_key = cache_key(name, opts)
     cache_ttl = Keyword.get(opts, :cache_ttl, 60_000)
+    fallback = Keyword.get(opts, :fallback)
 
     case get_cached(cache_key) do
       {:ok, prompt} ->
@@ -119,9 +138,45 @@ defmodule Langfuse.Prompt do
             {:ok, prompt}
 
           error ->
-            error
+            handle_fetch_error(error, name, fallback)
         end
     end
+  end
+
+  defp handle_fetch_error(_error, name, %__MODULE__{} = fallback) do
+    {:ok, %{fallback | name: name}}
+  end
+
+  defp handle_fetch_error(_error, name, template) when is_binary(template) do
+    prompt = %__MODULE__{
+      name: name,
+      version: 0,
+      type: :text,
+      prompt: template,
+      config: nil,
+      labels: [],
+      tags: []
+    }
+
+    {:ok, prompt}
+  end
+
+  defp handle_fetch_error(_error, name, messages) when is_list(messages) do
+    prompt = %__MODULE__{
+      name: name,
+      version: 0,
+      type: :chat,
+      prompt: messages,
+      config: nil,
+      labels: [],
+      tags: []
+    }
+
+    {:ok, prompt}
+  end
+
+  defp handle_fetch_error(error, _name, nil) do
+    error
   end
 
   @doc """
