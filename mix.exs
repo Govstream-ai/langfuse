@@ -15,7 +15,7 @@ defmodule Langfuse.MixProject do
       package: package(),
       docs: docs(),
       name: "Langfuse",
-      description: "Elixir SDK for Langfuse - LLM observability, tracing, and prompt management",
+      description: "Community Elixir SDK for Langfuse - LLM observability, tracing, and prompt management",
       source_url: @source_url,
       dialyzer: [
         plt_file: {:no_warn, "priv/plts/dialyzer.plt"},
@@ -51,7 +51,10 @@ defmodule Langfuse.MixProject do
   defp package do
     [
       licenses: ["MIT"],
-      links: %{"GitHub" => @source_url},
+      links: %{
+        "GitHub" => @source_url,
+        "Changelog" => "#{@source_url}/blob/main/CHANGELOG.md"
+      },
       maintainers: ["Manu Ajith"],
       files: ~w(lib .formatter.exs mix.exs README.md LICENSE CHANGELOG.md)
     ]
@@ -62,7 +65,32 @@ defmodule Langfuse.MixProject do
       main: "readme",
       extras: ["README.md", "CHANGELOG.md"],
       source_ref: "v#{@version}",
-      source_url: @source_url
+      source_url: @source_url,
+      groups_for_modules: [
+        Tracing: [
+          Langfuse,
+          Langfuse.Trace,
+          Langfuse.Span,
+          Langfuse.Generation,
+          Langfuse.Event
+        ],
+        Evaluation: [
+          Langfuse.Score,
+          Langfuse.Session
+        ],
+        Prompts: [
+          Langfuse.Prompt
+        ],
+        "API Client": [
+          Langfuse.Client
+        ],
+        Infrastructure: [
+          Langfuse.Config,
+          Langfuse.Ingestion,
+          Langfuse.HTTP,
+          Langfuse.Telemetry
+        ]
+      ]
     ]
   end
 end

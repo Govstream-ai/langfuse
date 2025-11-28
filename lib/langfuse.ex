@@ -1,6 +1,8 @@
 defmodule Langfuse do
   @moduledoc """
-  Elixir SDK for Langfuse - open source LLM observability platform.
+  Community Elixir SDK for Langfuse - open source LLM observability platform.
+
+  > Note: This is an unofficial community-maintained SDK.
 
   This module provides the primary interface for tracing LLM applications,
   recording generations, scoring outputs, and managing prompts. All tracing

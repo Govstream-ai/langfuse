@@ -3,7 +3,9 @@
 [![Hex.pm](https://img.shields.io/hexpm/v/langfuse.svg)](https://hex.pm/packages/langfuse)
 [![Docs](https://img.shields.io/badge/hex-docs-blue.svg)](https://hexdocs.pm/langfuse)
 
-Elixir SDK for [Langfuse](https://langfuse.com) - Open source LLM observability, tracing, and prompt management.
+Community Elixir SDK for [Langfuse](https://langfuse.com) - Open source LLM observability, tracing, and prompt management.
+
+> **Note**: This is an unofficial community-maintained SDK, not affiliated with or endorsed by Langfuse GmbH.
 
 ## Installation
 
