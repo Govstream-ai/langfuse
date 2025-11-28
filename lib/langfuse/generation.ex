@@ -70,6 +70,28 @@ defmodule Langfuse.Generation do
   Token usage and cost information.
 
   All fields are optional. Costs should be in USD.
+
+  ## Standard Fields
+
+    * `:input` - Input token/unit count
+    * `:output` - Output token/unit count
+    * `:total` - Total token/unit count
+    * `:unit` - Unit type (e.g., "TOKENS", "CHARACTERS")
+    * `:input_cost` - Input cost in USD
+    * `:output_cost` - Output cost in USD
+    * `:total_cost` - Total cost in USD
+
+  ## OpenAI-Compatible Fields
+
+    * `:prompt_tokens` - Prompt tokens (maps to input)
+    * `:completion_tokens` - Completion tokens (maps to output)
+    * `:total_tokens` - Total tokens (maps to total)
+
+  ## Extended Usage Details
+
+  Any additional keys are passed through as usage details, supporting
+  provider-specific fields like `:cache_read_input_tokens` or
+  `:reasoning_tokens`.
   """
   @type usage :: %{
           optional(:input) => non_neg_integer(),
@@ -78,7 +100,11 @@ defmodule Langfuse.Generation do
           optional(:unit) => String.t(),
           optional(:input_cost) => float(),
           optional(:output_cost) => float(),
-          optional(:total_cost) => float()
+          optional(:total_cost) => float(),
+          optional(:prompt_tokens) => non_neg_integer(),
+          optional(:completion_tokens) => non_neg_integer(),
+          optional(:total_tokens) => non_neg_integer(),
+          optional(atom()) => term()
         }
 
   @typedoc """
@@ -347,17 +373,65 @@ defmodule Langfuse.Generation do
     |> maybe_put(:environment, Langfuse.Config.get(:environment))
   end
 
-  defp format_usage(nil), do: nil
+  @doc """
+  Formats usage data for the Langfuse API.
 
-  defp format_usage(usage) do
-    %{}
-    |> maybe_put(:input, usage[:input])
-    |> maybe_put(:output, usage[:output])
-    |> maybe_put(:total, usage[:total])
-    |> maybe_put(:unit, usage[:unit])
-    |> maybe_put(:inputCost, usage[:input_cost])
-    |> maybe_put(:outputCost, usage[:output_cost])
-    |> maybe_put(:totalCost, usage[:total_cost])
+  Converts Elixir-style snake_case keys to camelCase and handles
+  OpenAI-compatible field mappings.
+
+  ## Examples
+
+      iex> Langfuse.Generation.format_usage(nil)
+      nil
+
+      iex> Langfuse.Generation.format_usage(%{input: 10, output: 5})
+      %{input: 10, output: 5}
+
+      iex> Langfuse.Generation.format_usage(%{input: 100, output: 50, input_cost: 0.001, output_cost: 0.002})
+      %{input: 100, output: 50, inputCost: 0.001, outputCost: 0.002}
+
+      iex> Langfuse.Generation.format_usage(%{prompt_tokens: 100, completion_tokens: 50})
+      %{input: 100, output: 50}
+
+      iex> Langfuse.Generation.format_usage(%{cache_read_input_tokens: 50, reasoning_tokens: 100})
+      %{cacheReadInputTokens: 50, reasoningTokens: 100}
+
+  """
+  @spec format_usage(usage() | nil) :: map() | nil
+  def format_usage(nil), do: nil
+
+  def format_usage(usage) when is_map(usage) do
+    known_keys = [:input, :output, :total, :unit, :input_cost, :output_cost, :total_cost,
+                  :prompt_tokens, :completion_tokens, :total_tokens]
+
+    base =
+      %{}
+      |> maybe_put(:input, usage[:input] || usage[:prompt_tokens])
+      |> maybe_put(:output, usage[:output] || usage[:completion_tokens])
+      |> maybe_put(:total, usage[:total] || usage[:total_tokens])
+      |> maybe_put(:unit, usage[:unit])
+      |> maybe_put(:inputCost, usage[:input_cost])
+      |> maybe_put(:outputCost, usage[:output_cost])
+      |> maybe_put(:totalCost, usage[:total_cost])
+
+    extra_keys = Map.keys(usage) -- known_keys
+
+    Enum.reduce(extra_keys, base, fn key, acc ->
+      camel_key = to_camel_case(key)
+      maybe_put(acc, camel_key, usage[key])
+    end)
+  end
+
+  defp to_camel_case(atom) when is_atom(atom) do
+    atom
+    |> Atom.to_string()
+    |> to_camel_case_string()
+    |> String.to_atom()
+  end
+
+  defp to_camel_case_string(string) do
+    [first | rest] = String.split(string, "_")
+    Enum.join([first | Enum.map(rest, &String.capitalize/1)])
   end
 
   defp level_to_string(:debug), do: "DEBUG"
