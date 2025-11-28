@@ -298,10 +298,86 @@ defmodule Langfuse.Prompt do
     end)
   end
 
+  @doc """
+  Invalidates a cached prompt by name.
+
+  Removes all cached versions and labels for the given prompt name.
+  Use this when you know a prompt has been updated in Langfuse and want
+  to force a fresh fetch on the next `get/2` call.
+
+  ## Options
+
+    * `:version` - Only invalidate a specific version.
+    * `:label` - Only invalidate a specific label.
+
+  ## Examples
+
+      iex> Langfuse.Prompt.invalidate("my-prompt")
+      :ok
+
+      iex> Langfuse.Prompt.invalidate("my-prompt", version: 2)
+      :ok
+
+      iex> Langfuse.Prompt.invalidate("my-prompt", label: "production")
+      :ok
+
+  """
+  @spec invalidate(String.t(), keyword()) :: :ok
+  def invalidate(name, opts \\ []) do
+    key = cache_key(name, opts)
+
+    if opts[:version] || opts[:label] do
+      delete_cache_key(key)
+    else
+      delete_cache_by_name(name)
+    end
+
+    :ok
+  end
+
+  @doc """
+  Clears all cached prompts.
+
+  Use this to force fresh fetches for all prompts. This is useful
+  when deploying new prompt versions across the board.
+
+  ## Examples
+
+      iex> Langfuse.Prompt.invalidate_all()
+      :ok
+
+  """
+  @spec invalidate_all() :: :ok
+  def invalidate_all do
+    try do
+      :ets.delete_all_objects(:langfuse_prompt_cache)
+    rescue
+      ArgumentError -> :ok
+    end
+
+    :ok
+  end
+
   defp cache_key(name, opts) do
     version = opts[:version]
     label = opts[:label]
     {name, version, label}
+  end
+
+  defp delete_cache_key(key) do
+    try do
+      :ets.delete(:langfuse_prompt_cache, key)
+    rescue
+      ArgumentError -> :ok
+    end
+  end
+
+  defp delete_cache_by_name(name) do
+    try do
+      :ets.match_delete(:langfuse_prompt_cache, {{name, :_, :_}, :_, :_})
+    rescue
+      ArgumentError -> :ok
+    end
   end
 
   defp get_cached(key) do

@@ -132,4 +132,34 @@ defmodule Langfuse.PromptTest do
       assert meta == %{prompt_name: "my-prompt", prompt_version: 3}
     end
   end
+
+  describe "invalidate/2" do
+    test "returns :ok for non-existent cache" do
+      assert Prompt.invalidate("non-existent") == :ok
+    end
+
+    test "returns :ok with version option" do
+      assert Prompt.invalidate("my-prompt", version: 2) == :ok
+    end
+
+    test "returns :ok with label option" do
+      assert Prompt.invalidate("my-prompt", label: "production") == :ok
+    end
+  end
+
+  describe "invalidate_all/0" do
+    test "returns :ok even when cache is empty" do
+      assert Prompt.invalidate_all() == :ok
+    end
+
+    test "returns :ok when cache does not exist" do
+      try do
+        :ets.delete(:langfuse_prompt_cache)
+      rescue
+        ArgumentError -> :ok
+      end
+
+      assert Prompt.invalidate_all() == :ok
+    end
+  end
 end
