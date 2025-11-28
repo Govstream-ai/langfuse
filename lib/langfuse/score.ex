@@ -1,35 +1,102 @@
 defmodule Langfuse.Score do
   @moduledoc """
-  Scoring functionality for Langfuse traces and observations.
+  Attach evaluation scores to traces and observations.
 
-  Supports three score types:
-  - **Numeric**: Floating point values (e.g., 0.0 to 1.0 for quality scores)
-  - **Categorical**: String values from a predefined set (e.g., "good", "bad")
-  - **Boolean**: True/false values
+  Scores are evaluation metrics that enable quality tracking, filtering,
+  and analysis in the Langfuse dashboard. They can be attached to traces,
+  spans, or generations.
 
-  ## Examples
+  ## Score Types
+
+  Langfuse supports three score types:
+
+    * **Numeric** - Floating point values for quantitative metrics
+      (e.g., 0.0 to 1.0 for quality scores, 1-5 for ratings)
+
+    * **Categorical** - String values from a predefined set
+      (e.g., "positive", "negative", "neutral" for sentiment)
+
+    * **Boolean** - True/false values for binary classifications
+      (e.g., hallucination detection, relevance checks)
+
+  ## Creating Scores
+
+  Scores are created via `Langfuse.score/2`:
 
       trace = Langfuse.trace(name: "chat")
 
-      # Numeric score
       Langfuse.score(trace, name: "quality", value: 0.85)
 
-      # Categorical score
-      Langfuse.score(trace, name: "sentiment", string_value: "positive", data_type: :categorical)
+      Langfuse.score(trace,
+        name: "sentiment",
+        string_value: "positive",
+        data_type: :categorical
+      )
 
-      # Boolean score
-      Langfuse.score(trace, name: "hallucination", value: 0, data_type: :boolean)
+  ## Type Inference
 
-      # Score with comment
-      Langfuse.score(trace, name: "feedback", value: 4, comment: "Very helpful response")
+  If `:data_type` is not specified, it is inferred:
+
+    * If `:string_value` is present, type is `:categorical`
+    * If `:value` is a boolean, type is `:boolean`
+    * Otherwise, type is `:numeric`
+
+  ## Score Configurations
+
+  Scores can reference a predefined configuration via `:config_id`,
+  which defines allowed values, ranges, and metadata in Langfuse.
 
   """
 
   alias Langfuse.{Ingestion, Trace, Span, Generation}
 
+  @typedoc "Score data type classification."
   @type data_type :: :numeric | :categorical | :boolean
+
+  @typedoc "Valid targets for scoring: traces, spans, generations, or trace IDs."
   @type target :: Trace.t() | Span.t() | Generation.t() | String.t()
 
+  @doc """
+  Creates a score and enqueues it for ingestion.
+
+  The score is attached to the given target (trace, span, or generation)
+  and immediately queued for asynchronous delivery to Langfuse.
+
+  ## Options
+
+    * `:name` - Score name (required). Examples: "accuracy", "relevance".
+    * `:value` - Numeric value for numeric or boolean scores.
+    * `:string_value` - String value for categorical scores.
+    * `:data_type` - Score type: `:numeric`, `:categorical`, or `:boolean`.
+      Auto-inferred from values if not provided.
+    * `:comment` - Free-text comment or reasoning for the score.
+    * `:id` - Custom score ID for idempotent updates.
+    * `:config_id` - Reference to a score configuration in Langfuse.
+
+  ## Examples
+
+      iex> trace = Langfuse.Trace.new(name: "test")
+      iex> Langfuse.Score.create(trace, name: "quality", value: 0.95)
+      :ok
+
+      iex> trace = Langfuse.Trace.new(name: "test")
+      iex> Langfuse.Score.create(trace,
+      ...>   name: "sentiment",
+      ...>   string_value: "positive",
+      ...>   data_type: :categorical
+      ...> )
+      :ok
+
+      iex> trace = Langfuse.Trace.new(name: "test")
+      iex> Langfuse.Score.create(trace,
+      ...>   name: "factual",
+      ...>   value: true,
+      ...>   data_type: :boolean,
+      ...>   comment: "Verified against source"
+      ...> )
+      :ok
+
+  """
   @spec create(target(), keyword()) :: :ok | {:error, term()}
   def create(target, opts) do
     name = Keyword.fetch!(opts, :name)
@@ -62,6 +129,28 @@ defmodule Langfuse.Score do
     :ok
   end
 
+  @doc """
+  Creates a score for a session.
+
+  Session scores evaluate the entire session rather than individual
+  traces or observations.
+
+  ## Options
+
+    * `:name` - Score name (required).
+    * `:value` - Numeric value for numeric or boolean scores.
+    * `:string_value` - String value for categorical scores.
+    * `:data_type` - Score type: `:numeric`, `:categorical`, or `:boolean`.
+    * `:comment` - Free-text comment or reasoning.
+    * `:id` - Custom score ID.
+    * `:config_id` - Reference to a score configuration.
+
+  ## Examples
+
+      iex> Langfuse.Score.score_session("session-123", name: "satisfaction", value: 4.5)
+      :ok
+
+  """
   @spec score_session(String.t(), keyword()) :: :ok | {:error, term()}
   def score_session(session_id, opts) when is_binary(session_id) do
     name = Keyword.fetch!(opts, :name)

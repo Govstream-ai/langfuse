@@ -1,37 +1,67 @@
 defmodule Langfuse.Prompt do
   @moduledoc """
-  Prompt management for Langfuse.
+  Fetch, cache, and compile prompts from Langfuse.
 
-  Fetches, caches, and compiles prompts from Langfuse. Supports both
-  text and chat prompt types with variable substitution.
+  Prompts in Langfuse enable version-controlled prompt management. This module
+  provides functions to fetch prompts, compile them with variables, and link
+  them to generations for tracking which prompt version was used.
 
-  ## Examples
+  ## Prompt Types
 
-      # Fetch a prompt by name
+  Langfuse supports two prompt types:
+
+    * `:text` - Simple string prompts with `{{variable}}` placeholders
+    * `:chat` - List of message maps with role/content structure
+
+  ## Fetching Prompts
+
+  Fetch prompts by name, with optional version or label:
+
       {:ok, prompt} = Langfuse.Prompt.get("my-prompt")
-
-      # Fetch a specific version
       {:ok, prompt} = Langfuse.Prompt.get("my-prompt", version: 2)
-
-      # Fetch by label
       {:ok, prompt} = Langfuse.Prompt.get("my-prompt", label: "production")
 
-      # Compile with variables
-      compiled = Langfuse.Prompt.compile(prompt, %{name: "Alice", topic: "weather"})
+  ## Compiling Prompts
 
-      # Link prompt to generation
+  Substitute variables in prompt templates:
+
+      {:ok, prompt} = Langfuse.Prompt.get("greeting")
+      compiled = Langfuse.Prompt.compile(prompt, %{name: "Alice"})
+
+  ## Linking to Generations
+
+  Track which prompt version was used in a generation:
+
+      {:ok, prompt} = Langfuse.Prompt.get("chat-template")
+
       generation = Langfuse.generation(trace,
-        name: "chat",
+        name: "completion",
+        model: "gpt-4",
         prompt_name: prompt.name,
         prompt_version: prompt.version
       )
+
+  ## Caching
+
+  Prompts are cached by default for 60 seconds. Configure TTL per request:
+
+      {:ok, prompt} = Langfuse.Prompt.get("my-prompt", cache_ttl: 300_000)
+
+  Use `fetch/2` to bypass the cache entirely.
 
   """
 
   alias Langfuse.HTTP
 
+  @typedoc "Prompt type: text or chat."
   @type prompt_type :: :text | :chat
 
+  @typedoc """
+  A prompt struct containing all prompt attributes.
+
+  The `:prompt` field contains the template content: a string for text
+  prompts, or a list of message maps for chat prompts.
+  """
   @type t :: %__MODULE__{
           name: String.t(),
           version: pos_integer(),
@@ -45,19 +75,32 @@ defmodule Langfuse.Prompt do
   defstruct [:name, :version, :type, :prompt, :config, :labels, :tags]
 
   @doc """
-  Fetches a prompt from Langfuse.
+  Fetches a prompt from Langfuse with caching.
+
+  Returns the cached prompt if available and not expired. Otherwise,
+  fetches from the API and caches the result.
 
   ## Options
 
-    * `:version` - Specific version number to fetch
-    * `:label` - Label to fetch (e.g., "production", "latest")
-    * `:cache_ttl` - Cache TTL in milliseconds (default: 60_000)
+    * `:version` - Specific version number to fetch.
+    * `:label` - Label to fetch (e.g., "production", "latest").
+    * `:cache_ttl` - Cache TTL in milliseconds. Defaults to 60,000 (1 minute).
 
   ## Examples
 
-      {:ok, prompt} = Langfuse.Prompt.get("my-prompt")
+      iex> {:ok, prompt} = Langfuse.Prompt.get("my-prompt")
+      iex> prompt.name
+      "my-prompt"
+
       {:ok, prompt} = Langfuse.Prompt.get("my-prompt", version: 2)
+
       {:ok, prompt} = Langfuse.Prompt.get("my-prompt", label: "production")
+
+      {:ok, prompt} = Langfuse.Prompt.get("my-prompt", cache_ttl: 300_000)
+
+  ## Errors
+
+  Returns `{:error, :not_found}` if the prompt does not exist.
 
   """
   @spec get(String.t(), keyword()) :: {:ok, t()} | {:error, term()}
@@ -82,7 +125,20 @@ defmodule Langfuse.Prompt do
   end
 
   @doc """
-  Fetches a prompt without caching.
+  Fetches a prompt directly from Langfuse without caching.
+
+  Use this when you need the latest version and want to bypass the cache.
+
+  ## Options
+
+    * `:version` - Specific version number to fetch.
+    * `:label` - Label to fetch (e.g., "production", "latest").
+
+  ## Examples
+
+      {:ok, prompt} = Langfuse.Prompt.fetch("my-prompt")
+      {:ok, prompt} = Langfuse.Prompt.fetch("my-prompt", version: 3)
+
   """
   @spec fetch(String.t(), keyword()) :: {:ok, t()} | {:error, term()}
   def fetch(name, opts \\ []) do
@@ -92,18 +148,27 @@ defmodule Langfuse.Prompt do
   @doc """
   Compiles a prompt by substituting variables.
 
-  For text prompts, replaces `{{variable}}` patterns.
-  For chat prompts, replaces variables in each message's content.
+  For text prompts, replaces `{{variable}}` patterns in the template string.
+  For chat prompts, replaces variables in each message's content field.
+
+  Variable names in the template must match the keys in the variables map.
+  Keys can be atoms or strings.
 
   ## Examples
 
-      # Text prompt: "Hello {{name}}, let's talk about {{topic}}"
-      compiled = Langfuse.Prompt.compile(prompt, %{name: "Alice", topic: "weather"})
+      # Text prompt with template: "Hello {{name}}, let's talk about {{topic}}"
+      compiled = Langfuse.Prompt.compile(text_prompt, %{name: "Alice", topic: "weather"})
       # => "Hello Alice, let's talk about weather"
 
-      # Chat prompt
+      # Chat prompt with system message containing {{user_name}}
       compiled = Langfuse.Prompt.compile(chat_prompt, %{user_name: "Bob"})
-      # => [%{role: "system", content: "You are helping Bob"}, ...]
+      # => [%{"role" => "system", "content" => "You are helping Bob"}, ...]
+
+      # Using atom keys
+      compiled = Langfuse.Prompt.compile(prompt, %{name: "Alice"})
+
+      # Using string keys
+      compiled = Langfuse.Prompt.compile(prompt, %{"name" => "Alice"})
 
   """
   @spec compile(t(), map()) :: String.t() | list(map())
@@ -122,10 +187,19 @@ defmodule Langfuse.Prompt do
   @doc """
   Returns prompt metadata for linking to generations.
 
+  The returned map can be merged into generation options to track
+  which prompt version was used.
+
   ## Examples
 
+      {:ok, prompt} = Langfuse.Prompt.get("my-prompt")
       meta = Langfuse.Prompt.link_meta(prompt)
       # => %{prompt_name: "my-prompt", prompt_version: 2}
+
+      # Use with generation
+      generation = Langfuse.generation(trace,
+        [name: "completion", model: "gpt-4"] ++ Map.to_list(meta)
+      )
 
   """
   @spec link_meta(t()) :: %{prompt_name: String.t(), prompt_version: pos_integer()}
