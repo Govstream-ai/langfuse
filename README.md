@@ -206,12 +206,127 @@ Langfuse.score(trace,
 )
 ```
 
-## Client API
+## API Coverage
 
-Direct access to Langfuse REST API:
+This SDK covers the core Langfuse API. See the [Langfuse API Reference](https://api.reference.langfuse.com) for full documentation.
+
+### Tracing (via SDK)
+
+| Feature | Function | Status |
+|---------|----------|--------|
+| Create trace | `Langfuse.trace/1` | Supported |
+| Create span | `Langfuse.span/2` | Supported |
+| Create generation | `Langfuse.generation/2` | Supported |
+| Create event | `Langfuse.event/2` | Supported |
+| Create score | `Langfuse.score/2` | Supported |
+| Update observation | `Langfuse.update/2` | Supported |
+| End observation | `Langfuse.end_observation/1` | Supported |
+| Batch ingestion | `Langfuse.Ingestion` | Supported |
+
+### Prompts
+
+| Operation | Function | Status |
+|-----------|----------|--------|
+| Get prompt | `Client.get_prompt/2` | Supported |
+| List prompts | `Client.list_prompts/1` | Supported |
+| Create prompt | `Client.create_prompt/1` | Supported |
+| Update labels | `Client.update_prompt_labels/3` | Supported |
+
+### Datasets
+
+| Operation | Function | Status |
+|-----------|----------|--------|
+| Create dataset | `Client.create_dataset/1` | Supported |
+| Get dataset | `Client.get_dataset/1` | Supported |
+| List datasets | `Client.list_datasets/1` | Supported |
+| Delete dataset | `Client.delete_dataset/1` | Supported |
+
+### Dataset Items
+
+| Operation | Function | Status |
+|-----------|----------|--------|
+| Create item | `Client.create_dataset_item/1` | Supported |
+| Get item | `Client.get_dataset_item/1` | Supported |
+| Update item | `Client.update_dataset_item/2` | Supported |
+| List items | `Client.list_dataset_items/1` | Supported |
+| Delete item | `Client.delete_dataset_item/1` | Supported |
+
+### Dataset Runs
+
+| Operation | Function | Status |
+|-----------|----------|--------|
+| Create run | `Client.create_dataset_run/1` | Supported |
+| Get run | `Client.get_dataset_run/2` | Supported |
+| List runs | `Client.list_dataset_runs/2` | Supported |
+| Delete run | `Client.delete_dataset_run/2` | Supported |
+| Create run item | `Client.create_dataset_run_item/1` | Supported |
+| List run items | `Client.list_dataset_run_items/1` | Supported |
+
+### Traces & Sessions
+
+| Operation | Function | Status |
+|-----------|----------|--------|
+| Get trace | `Client.get_trace/1` | Supported |
+| List traces | `Client.list_traces/1` | Supported |
+| Get session | `Client.get_session/1` | Supported |
+| List sessions | `Client.list_sessions/1` | Supported |
+
+### Observations
+
+| Operation | Function | Status |
+|-----------|----------|--------|
+| Get observation | `Client.get_observation/1` | Supported |
+| List observations | `Client.list_observations/1` | Supported |
+
+### Scores
+
+| Operation | Function | Status |
+|-----------|----------|--------|
+| Create score | `Langfuse.score/2` | Supported |
+| Get score | `Client.get_score/1` | Supported |
+| List scores | `Client.list_scores/1` | Supported |
+| Delete score | `Client.delete_score/1` | Supported |
+
+### Score Configs
+
+| Operation | Function | Status |
+|-----------|----------|--------|
+| Create config | `Client.create_score_config/1` | Supported |
+| Get config | `Client.get_score_config/1` | Supported |
+| List configs | `Client.list_score_configs/1` | Supported |
+
+### Models
+
+| Operation | Function | Status |
+|-----------|----------|--------|
+| Create model | `Client.create_model/1` | Supported |
+| Get model | `Client.get_model/1` | Supported |
+| List models | `Client.list_models/1` | Supported |
+| Delete model | `Client.delete_model/1` | Supported |
+
+### Health & Auth
+
+| Operation | Function | Status |
+|-----------|----------|--------|
+| Auth check | `Langfuse.auth_check/0` | Supported |
+| Health check | `Client.get("/api/public/health")` | Via raw API |
+
+### Not Yet Implemented
+
+The following Langfuse API features are not yet implemented but can be accessed via `Client.get/2`, `Client.post/2`, `Client.patch/2`, and `Client.delete/1`:
+
+- Annotation Queues
+- Comments
+- Media (file uploads)
+- Metrics
+- Projects management
+- Organizations management
+- SCIM provisioning
+
+## Client API Examples
 
 ```elixir
-{:ok, _} = Langfuse.Client.auth_check()
+{:ok, _} = Langfuse.auth_check()
 
 {:ok, dataset} = Langfuse.Client.create_dataset(name: "eval-set")
 {:ok, datasets} = Langfuse.Client.list_datasets()
