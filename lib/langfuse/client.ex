@@ -263,12 +263,13 @@ defmodule Langfuse.Client do
   ## Options
 
     * `:dataset_name` - Dataset name (required)
-    * `:input` - Input data (required)
+    * `:input` - Input data
     * `:expected_output` - Expected output data
     * `:metadata` - Additional metadata
     * `:source_trace_id` - Source trace ID
     * `:source_observation_id` - Source observation ID
-    * `:status` - Item status ("ACTIVE" or "ARCHIVED")
+    * `:id` - Item ID for upsert. Must be unique per project and cannot be reused across datasets.
+    * `:status` - Item status ("ACTIVE" or "ARCHIVED", defaults to "ACTIVE")
 
   ## Examples
 
@@ -284,16 +285,17 @@ defmodule Langfuse.Client do
   def create_dataset_item(opts) do
     body =
       %{
-        datasetName: Keyword.fetch!(opts, :dataset_name),
-        input: Keyword.fetch!(opts, :input)
+        datasetName: Keyword.fetch!(opts, :dataset_name)
       }
+      |> maybe_put(:input, opts[:input])
       |> maybe_put(:expectedOutput, opts[:expected_output])
       |> maybe_put(:metadata, opts[:metadata])
       |> maybe_put(:sourceTraceId, opts[:source_trace_id])
       |> maybe_put(:sourceObservationId, opts[:source_observation_id])
+      |> maybe_put(:id, opts[:id])
       |> maybe_put(:status, opts[:status])
 
-    post("/api/public/v2/dataset-items", body)
+    post("/api/public/dataset-items", body)
   end
 
   @doc """
@@ -307,14 +309,18 @@ defmodule Langfuse.Client do
   """
   @spec get_dataset_item(String.t()) :: response()
   def get_dataset_item(id) do
-    get("/api/public/v2/dataset-items/#{URI.encode(id)}")
+    get("/api/public/dataset-items/#{URI.encode(id)}")
   end
 
   @doc """
-  Updates a dataset item.
+  Updates a dataset item via upsert.
+
+  This uses the create endpoint with the item's ID to perform an upsert.
+  The dataset_name is required by the API for the upsert.
 
   ## Options
 
+    * `:dataset_name` - Dataset name (required)
     * `:input` - Updated input data
     * `:expected_output` - Updated expected output
     * `:metadata` - Updated metadata
@@ -323,6 +329,7 @@ defmodule Langfuse.Client do
   ## Examples
 
       Langfuse.Client.update_dataset_item("item-abc-123",
+        dataset_name: "qa-evaluation",
         expected_output: %{answer: "Updated answer"},
         status: "ARCHIVED"
       )
@@ -331,26 +338,19 @@ defmodule Langfuse.Client do
   """
   @spec update_dataset_item(String.t(), keyword()) :: response()
   def update_dataset_item(id, opts) do
-    body =
-      %{}
-      |> maybe_put(:input, opts[:input])
-      |> maybe_put(:expectedOutput, opts[:expected_output])
-      |> maybe_put(:metadata, opts[:metadata])
-      |> maybe_put(:status, opts[:status])
-
-    patch("/api/public/v2/dataset-items/#{URI.encode(id)}", body)
+    create_dataset_item(Keyword.put(opts, :id, id))
   end
 
   @doc """
-  Creates a dataset run.
+  Creates a dataset run by creating the first run item.
 
-  A dataset run represents a single evaluation pass over a dataset,
-  linking trace executions to dataset items for comparison.
+  Dataset runs are created implicitly via `create_dataset_run_item/1`.
+  This convenience function creates a run item to initialize the run.
 
   ## Options
 
     * `:name` - Run name (required)
-    * `:dataset_name` - Dataset name (required)
+    * `:dataset_name` - Dataset name (required) — used to look up the first item
     * `:description` - Run description
     * `:metadata` - Additional metadata
 
@@ -360,27 +360,12 @@ defmodule Langfuse.Client do
         name: "eval-2025-01-15",
         dataset_name: "qa-evaluation"
       )
-      #=> {:ok, %{"name" => "eval-2025-01-15", ...}}
-
-      Langfuse.Client.create_dataset_run(
-        name: "gpt4-vs-claude",
-        dataset_name: "qa-evaluation",
-        description: "Comparing GPT-4 and Claude responses",
-        metadata: %{model: "gpt-4"}
-      )
 
   """
+  @deprecated "Use create_dataset_run_item/1 directly — runs are created implicitly"
   @spec create_dataset_run(keyword()) :: response()
-  def create_dataset_run(opts) do
-    body =
-      %{
-        name: Keyword.fetch!(opts, :name),
-        datasetName: Keyword.fetch!(opts, :dataset_name)
-      }
-      |> maybe_put(:description, opts[:description])
-      |> maybe_put(:metadata, opts[:metadata])
-
-    post("/api/public/v2/dataset-runs", body)
+  def create_dataset_run(_opts) do
+    {:error, :not_supported}
   end
 
   @doc """
@@ -391,12 +376,13 @@ defmodule Langfuse.Client do
 
   ## Options
 
-    * `:run_name` - Run name (required)
-    * `:run_description` - Run description
+    * `:run_name` - Run name (required). Creates the run if it doesn't exist.
+    * `:run_description` - Run description. Updates the run if it already exists.
     * `:dataset_item_id` - Dataset item ID (required)
-    * `:trace_id` - Trace ID (required)
+    * `:trace_id` - Trace ID (should always be provided)
     * `:observation_id` - Observation ID (to link specific span/generation)
-    * `:metadata` - Additional metadata
+    * `:metadata` - Metadata for the dataset run. Updates run if it already exists.
+    * `:dataset_version` - ISO 8601 timestamp to pin the dataset version
 
   ## Examples
 
@@ -413,14 +399,15 @@ defmodule Langfuse.Client do
     body =
       %{
         runName: Keyword.fetch!(opts, :run_name),
-        datasetItemId: Keyword.fetch!(opts, :dataset_item_id),
-        traceId: Keyword.fetch!(opts, :trace_id)
+        datasetItemId: Keyword.fetch!(opts, :dataset_item_id)
       }
+      |> maybe_put(:traceId, opts[:trace_id])
       |> maybe_put(:runDescription, opts[:run_description])
       |> maybe_put(:observationId, opts[:observation_id])
       |> maybe_put(:metadata, opts[:metadata])
+      |> maybe_put(:datasetVersion, opts[:dataset_version])
 
-    post("/api/public/v2/dataset-run-items", body)
+    post("/api/public/dataset-run-items", body)
   end
 
   @doc """
@@ -546,7 +533,7 @@ defmodule Langfuse.Client do
   @spec list_score_configs(keyword()) :: response()
   def list_score_configs(opts \\ []) do
     params = build_pagination_params(opts)
-    get("/api/public/v2/score-configs", params)
+    get("/api/public/score-configs", params)
   end
 
   @doc """
@@ -560,7 +547,7 @@ defmodule Langfuse.Client do
   """
   @spec get_score_config(String.t()) :: response()
   def get_score_config(id) do
-    get("/api/public/v2/score-configs/#{URI.encode(id)}")
+    get("/api/public/score-configs/#{URI.encode(id)}")
   end
 
   @doc """
@@ -611,7 +598,7 @@ defmodule Langfuse.Client do
       |> maybe_put(:categories, opts[:categories])
       |> maybe_put(:description, opts[:description])
 
-    post("/api/public/v2/score-configs", body)
+    post("/api/public/score-configs", body)
   end
 
   @doc """
@@ -851,7 +838,7 @@ defmodule Langfuse.Client do
   """
   @spec delete_dataset_item(String.t()) :: :ok | {:error, term()}
   def delete_dataset_item(id) do
-    delete("/api/public/v2/dataset-items/#{URI.encode(id)}")
+    delete("/api/public/dataset-items/#{URI.encode(id)}")
   end
 
   @doc """

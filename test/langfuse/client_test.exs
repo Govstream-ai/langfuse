@@ -10,37 +10,19 @@ defmodule Langfuse.ClientTest do
       end
     end
 
-    test "create_dataset_item/1 requires dataset_name and input" do
+    test "create_dataset_item/1 requires dataset_name" do
       assert_raise KeyError, fn ->
         Client.create_dataset_item(input: %{})
       end
-
-      assert_raise KeyError, fn ->
-        Client.create_dataset_item(dataset_name: "test")
-      end
     end
 
-    test "create_dataset_run/1 requires name and dataset_name" do
-      assert_raise KeyError, fn ->
-        Client.create_dataset_run(dataset_name: "test")
-      end
-
-      assert_raise KeyError, fn ->
-        Client.create_dataset_run(name: "test")
-      end
-    end
-
-    test "create_dataset_run_item/1 requires run_name, dataset_item_id, and trace_id" do
+    test "create_dataset_run_item/1 requires run_name and dataset_item_id" do
       assert_raise KeyError, fn ->
         Client.create_dataset_run_item(dataset_item_id: "item", trace_id: "trace")
       end
 
       assert_raise KeyError, fn ->
         Client.create_dataset_run_item(run_name: "run", trace_id: "trace")
-      end
-
-      assert_raise KeyError, fn ->
-        Client.create_dataset_run_item(run_name: "run", dataset_item_id: "item")
       end
     end
   end
@@ -148,7 +130,7 @@ defmodule Langfuse.ClientTest do
     end
 
     test "create_dataset_item/1 creates an item", %{bypass: bypass} do
-      Bypass.expect_once(bypass, "POST", "/api/public/v2/dataset-items", fn conn ->
+      Bypass.expect_once(bypass, "POST", "/api/public/dataset-items", fn conn ->
         {:ok, body, conn} = Plug.Conn.read_body(conn)
         payload = Jason.decode!(body)
 
@@ -170,7 +152,7 @@ defmodule Langfuse.ClientTest do
     end
 
     test "get_dataset_item/1 fetches item", %{bypass: bypass} do
-      Bypass.expect_once(bypass, "GET", "/api/public/v2/dataset-items/item-123", fn conn ->
+      Bypass.expect_once(bypass, "GET", "/api/public/dataset-items/item-123", fn conn ->
         conn
         |> Plug.Conn.put_resp_content_type("application/json")
         |> Plug.Conn.resp(200, Jason.encode!(%{id: "item-123", input: %{}}))
@@ -180,11 +162,13 @@ defmodule Langfuse.ClientTest do
       assert item["id"] == "item-123"
     end
 
-    test "update_dataset_item/2 updates item", %{bypass: bypass} do
-      Bypass.expect_once(bypass, "PATCH", "/api/public/v2/dataset-items/item-123", fn conn ->
+    test "update_dataset_item/2 upserts item via create endpoint", %{bypass: bypass} do
+      Bypass.expect_once(bypass, "POST", "/api/public/dataset-items", fn conn ->
         {:ok, body, conn} = Plug.Conn.read_body(conn)
         payload = Jason.decode!(body)
 
+        assert payload["id"] == "item-123"
+        assert payload["datasetName"] == "test-ds"
         assert payload["input"] == %{"updated" => true}
 
         conn
@@ -192,31 +176,22 @@ defmodule Langfuse.ClientTest do
         |> Plug.Conn.resp(200, Jason.encode!(%{id: "item-123", input: %{updated: true}}))
       end)
 
-      assert {:ok, result} = Client.update_dataset_item("item-123", input: %{updated: true})
+      assert {:ok, result} =
+               Client.update_dataset_item("item-123",
+                 dataset_name: "test-ds",
+                 input: %{updated: true}
+               )
+
       assert result["id"] == "item-123"
     end
 
-    test "create_dataset_run/1 creates a run", %{bypass: bypass} do
-      Bypass.expect_once(bypass, "POST", "/api/public/v2/dataset-runs", fn conn ->
-        {:ok, body, conn} = Plug.Conn.read_body(conn)
-        payload = Jason.decode!(body)
-
-        assert payload["name"] == "eval-run-1"
-        assert payload["datasetName"] == "test-ds"
-
-        conn
-        |> Plug.Conn.put_resp_content_type("application/json")
-        |> Plug.Conn.resp(200, Jason.encode!(%{id: "run-123", name: "eval-run-1"}))
-      end)
-
-      assert {:ok, result} =
+    test "create_dataset_run/1 returns not_supported", %{bypass: _bypass} do
+      assert {:error, :not_supported} =
                Client.create_dataset_run(name: "eval-run-1", dataset_name: "test-ds")
-
-      assert result["name"] == "eval-run-1"
     end
 
     test "create_dataset_run_item/1 links trace to item", %{bypass: bypass} do
-      Bypass.expect_once(bypass, "POST", "/api/public/v2/dataset-run-items", fn conn ->
+      Bypass.expect_once(bypass, "POST", "/api/public/dataset-run-items", fn conn ->
         {:ok, body, conn} = Plug.Conn.read_body(conn)
         payload = Jason.decode!(body)
 
@@ -240,7 +215,7 @@ defmodule Langfuse.ClientTest do
     end
 
     test "list_score_configs/1 returns configs", %{bypass: bypass} do
-      Bypass.expect_once(bypass, "GET", "/api/public/v2/score-configs", fn conn ->
+      Bypass.expect_once(bypass, "GET", "/api/public/score-configs", fn conn ->
         conn
         |> Plug.Conn.put_resp_content_type("application/json")
         |> Plug.Conn.resp(200, Jason.encode!(%{data: [%{name: "accuracy"}]}))
@@ -251,7 +226,7 @@ defmodule Langfuse.ClientTest do
     end
 
     test "get_score_config/1 fetches config", %{bypass: bypass} do
-      Bypass.expect_once(bypass, "GET", "/api/public/v2/score-configs/cfg-123", fn conn ->
+      Bypass.expect_once(bypass, "GET", "/api/public/score-configs/cfg-123", fn conn ->
         conn
         |> Plug.Conn.put_resp_content_type("application/json")
         |> Plug.Conn.resp(200, Jason.encode!(%{id: "cfg-123", name: "accuracy"}))
@@ -262,7 +237,7 @@ defmodule Langfuse.ClientTest do
     end
 
     test "create_score_config/1 creates config", %{bypass: bypass} do
-      Bypass.expect_once(bypass, "POST", "/api/public/v2/score-configs", fn conn ->
+      Bypass.expect_once(bypass, "POST", "/api/public/score-configs", fn conn ->
         {:ok, body, conn} = Plug.Conn.read_body(conn)
         payload = Jason.decode!(body)
 
@@ -391,7 +366,7 @@ defmodule Langfuse.ClientTest do
     end
 
     test "delete_dataset_item/1 deletes item", %{bypass: bypass} do
-      Bypass.expect_once(bypass, "DELETE", "/api/public/v2/dataset-items/item-123", fn conn ->
+      Bypass.expect_once(bypass, "DELETE", "/api/public/dataset-items/item-123", fn conn ->
         Plug.Conn.resp(conn, 204, "")
       end)
 
